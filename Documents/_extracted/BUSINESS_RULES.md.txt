@@ -1,0 +1,377 @@
+BUSINESS_RULES.md
+Version: 1.0
+Status: Mandatory
+Classification: Business Logic Constitution
+Applies To:
+AI Engine
+Order Processing
+WhatsApp Integration
+WooCommerce Integration
+Dashboard
+Notifications
+Admin Portal
+Customer Portal
+1. Purpose
+This document defines the official business rules for CommercePilot.
+All business logic must follow these rules.
+If implementation conflicts with this document, this document takes precedence.
+2. Business Philosophy
+CommercePilot automates repetitive operational work.
+CommercePilot never replaces business decision-making.
+Artificial Intelligence assists.
+Humans decide.
+3. Human-in-the-Loop Principle
+AI may:
+Read messages• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+1
+Understand customer intent
+Extract order information
+Match products
+Calculate confidence
+Recommend actions
+Draft replies
+AI may NOT:
+Approve high-risk orders
+Change inventory manually
+Delete records
+Modify business settings
+Override owner decisions
+The business owner always has final authority.
+4. Tenant Rules
+Every business is a separate tenant.
+Each tenant has isolated:
+Users
+Customers
+Products
+Orders
+Messages
+Analytics
+AI Context
+Settings
+Cross-tenant access is strictly prohibited.
+5. Customer Rules
+A customer is uniquely identified by their WhatsApp phone number within a tenant.
+If a new message is received:
+Existing customer → attach conversation
+New customer → create customer profile automatically
+Customer history must never be lost.• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+2
+6. WhatsApp Message Rules
+Every incoming message must be stored before processing.
+Messages are immutable.
+Supported types:
+Text
+Image (Future)
+Voice (Future)
+Document (Future)
+Each message receives:
+Message ID
+Tenant ID
+Customer ID
+Timestamp
+Processing Status
+7. AI Processing Rules
+Every message enters the AI pipeline.
+Processing steps:
+Validate webhook
+Save message
+Detect intent
+Retrieve product catalog (RAG)
+Extract entities
+Calculate confidence
+Create draft result
+Notify owner (if required)
+AI must never skip validation.
+8. Intent Detection Rules
+Supported intents:
+Order
+Product Inquiry
+Price Inquiry
+Stock Inquiry• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+1. 
+2. 
+3. 
+4. 
+5. 
+6. 
+7. 
+8. 
+• 
+• 
+• 
+• 
+3
+Greeting
+Delivery Inquiry
+Complaint
+Support
+Unknown
+Unknown intents require manual review.
+9. Product Matching Rules
+AI must only match products from the tenant's catalog.
+Never invent products.
+If multiple products match:
+Return the best matches with confidence.
+If no product matches:
+Request clarification from the customer .
+10. Confidence Score Rules
+Confidence Score Range:
+0.00 – 1.00
+0.95–1.00 Automatic draft creation.
+0.80–0.94 Owner review recommended.
+Below 0.80 Manual confirmation required before order creation.
+Confidence score must be stored with every AI decision.
+11. Order Creation Rules
+Orders are created as:
+Draft
+↓• 
+• 
+• 
+• 
+• 
+4
+Pending Owner Approval
+↓
+Approved
+↓
+Synced to WooCommerce
+↓
+Customer Confirmed
+↓
+Completed
+AI never creates a final order directly.
+12. Order State Machine
+Allowed transitions:
+Draft
+↓
+Pending Approval
+↓
+Approved
+↓
+Processing
+↓
+Completed
+Alternative paths:
+Pending Approval
+5
+↓
+Rejected
+Approved
+↓
+Cancelled
+Completed orders cannot return to earlier states.
+13. Owner Approval Rules
+The owner may:
+Approve
+Reject
+Edit
+Request clarification
+Every owner action must be logged.
+Owner approval overrides AI recommendations.
+14. Inventory Rules
+Before approval:
+Validate stock.
+If stock is unavailable:
+Flag the order .
+Notify the owner .
+Suggest alternatives (future feature).
+Inventory is never reduced until the order is officially approved and synchronized.
+15. WooCommerce Synchronization Rules
+Synchronization occurs only after owner approval.• 
+• 
+• 
+• 
+6
+If synchronization fails:
+Retry automatically.
+Log the failure.
+Notify the owner after retry limits are exceeded.
+Never create duplicate WooCommerce orders.
+Idempotency must be enforced.
+16. Notification Rules
+Notify the owner when:
+New draft order created
+AI confidence is low
+WooCommerce sync fails
+AI processing fails
+Notify the customer when:
+Order received
+Order approved
+Order rejected
+Additional information required
+Order shipped (future)
+17. AI Reply Rules
+AI replies must be:
+Professional
+Friendly
+Concise
+Context-aware
+AI must never:
+Promise unavailable products.
+Guess delivery dates.• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+7
+Guess prices.
+Invent discounts.
+18. Duplicate Order Prevention
+Duplicate detection considers:
+Customer
+Product
+Quantity
+Recent conversation
+Time window
+Potential duplicates require owner review.
+19. Audit Rules
+Every business event is recorded.
+Audit entries include:
+Timestamp
+Tenant ID
+User ID
+Customer ID
+Order ID
+Event Type
+Previous State
+New State
+Audit logs are immutable.
+20. Automation Rules
+Automation is allowed only for low-risk repetitive tasks.
+Examples:
+✓ Message storage
+✓ AI extraction
+✓ Email sending• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+8
+✓ Notifications
+✓ Draft order generation
+Automation is prohibited for:
+✗ Final approval
+✗ Deleting records
+✗ Price overrides
+✗ Refunds
+✗ Business settings
+21. Error Handling Rules
+If AI fails:
+Save the message.
+Notify the owner .
+Allow manual processing.
+If WooCommerce fails:
+Retry using queue.
+Do not lose data.
+Never silently ignore failures.
+22. Retry Policy
+Retry:
+AI API failures
+Webhook delivery failures
+WooCommerce failures
+Email failures
+9
+Maximum retries:
+3
+Use exponential backoff.
+After maximum retries:
+Create a manual intervention task.
+23. Business Metrics
+Track:
+Orders processed
+AI accuracy
+Average approval time
+WooCommerce sync success
+AI confidence distribution
+Customer response time
+Manual intervention rate
+Automation success rate
+24. AI Learning Rules
+CommercePilot does not automatically retrain AI using customer conversations.
+Business data belongs to the tenant.
+No tenant data may be shared with another tenant.
+Future model improvements require explicit owner consent where applicable.
+25. Business Rule Change Policy
+Business rules are version-controlled.
+Changes require:
+Documentation updates
+Testing
+Approval
+Changelog entry• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+10
+26. Definition of Business Correctness
+A feature is business-correct only if:
+✓ It follows all business rules.
+✓ It respects tenant isolation.
+✓ It supports owner approval.
+✓ It never invents products.
+✓ It maintains audit logs.
+✓ It preserves customer history.
+✓ It prevents duplicate orders.
+✓ It integrates safely with WooCommerce.
+✓ It supports future platform expansion.
+Final Principle
+CommercePilot exists to automate repetitive business operations while preserving human control over
+critical business decisions.
+Every workflow should reduce manual effort, improve accuracy, and maintain trust.
+Whenever business efficiency and business safety conflict, business safety takes priority.
+11

@@ -1,0 +1,678 @@
+// ─────────────────────────────────────────────────────────────────
+// CommercePilot — Prisma Schema
+// Architecture: Multi-Tenant Shared Database + Tenant ID Isolation
+// Database: PostgreSQL 16 + pgvector extension
+// ORM: Prisma
+// Version: 1.0
+// ─────────────────────────────────────────────────────────────────
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector, uuidOssp(map: "uuid-ossp")]
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TENANT — Registered Business (SaaS Customer)
+// ─────────────────────────────────────────────────────────────────
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique // used in API paths
+  plan      TenantPlan @default(STARTER)
+  isActive  Boolean  @default(true)
+
+  // WhatsApp configuration (encrypted at application layer)
+  whatsappPhoneNumberId String?
+  whatsappAccessToken   String? // stored encrypted
+  whatsappVerifyToken   String?
+  whatsappProvider      WhatsAppProvider @default(MOCK)
+
+  // WooCommerce configuration (encrypted at application layer)
+  woocommerceUrl        String?
+  woocommerceKey        String? // stored encrypted
+  woocommerceSecret     String? // stored encrypted
+  woocommerceProvider   EcommerceProvider @default(MOCK)
+
+  // AI Configuration
+  aiConfidenceThreshold Float @default(0.85) // below this = manual review
+  autoApproveEnabled    Boolean @default(false)
+  autoApproveThreshold  Float @default(0.95)
+
+  // Business hours (JSON: { monday: { open: "09:00", close: "18:00" } })
+  businessHours Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  users                 User[]
+  customers             Customer[]
+  products              Product[]
+  orders                Order[]
+  orderItems            OrderItem[]
+  whatsappMessages      WhatsAppMessage[]
+  aiProcessingLogs      AIProcessingLog[]
+  aiDraftOrders         AIDraftOrder[]
+  aiDraftOrderItems     AIDraftOrderItem[]
+  inventoryTransactions InventoryTransaction[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+  conversations         Conversation[]
+
+  @@map("tenants")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// USER — System users (owners, staff, admins)
+// ─────────────────────────────────────────────────────────────────
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  name         String
+  email        String
+  passwordHash String
+  role         UserRole @default(STAFF)
+  isActive     Boolean  @default(true)
+  lastLogin    DateTime?
+
+  // Refresh token (SHA-256 hash of opaque token, nullable after logout)
+  refreshTokenHash String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CUSTOMER — WhatsApp contacts per tenant
+// ─────────────────────────────────────────────────────────────────
+model Customer {
+  id             String  @id @default(uuid()) @db.Uuid
+  tenantId       String  @db.Uuid
+  name           String?
+  phone          String  // WhatsApp phone number (e.g. +94771234567)
+  email          String?
+  address        String?
+  totalOrders    Int     @default(0)
+  lifetimeValue  Decimal @default(0) @db.Decimal(12, 2)
+  isBlocked      Boolean @default(false)
+
+  // Profile metadata from WhatsApp
+  whatsappProfileName String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  orders           Order[]
+  whatsappMessages WhatsAppMessage[]
+  conversations    Conversation[]
+  aiDraftOrders    AIDraftOrder[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@index([phone])
+  @@map("customers")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// PRODUCT — Tenant product catalog (RAG source)
+// ─────────────────────────────────────────────────────────────────
+model Product {
+  id            String  @id @default(uuid()) @db.Uuid
+  tenantId      String  @db.Uuid
+  name          String
+  description   String?
+  sku           String?
+  price         Decimal @db.Decimal(12, 2)
+  stockQuantity Int     @default(0)
+  isActive      Boolean @default(true)
+
+  // Product variants and attributes (JSONB)
+  // e.g. { "colors": ["white", "blue"], "sizes": ["S", "M", "L", "XL"] }
+  attributes Json?
+
+  // External system IDs
+  woocommerceId String?
+  shopifyId     String?
+
+  // pgvector embedding for RAG product search
+  // Generated from: name + description + attributes
+  // Model: text-embedding-004 (768 dimensions)
+  embedding Unsupported("vector(768)")?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id])
+  orderItems            OrderItem[]
+  inventoryTransactions InventoryTransaction[]
+  aiDraftOrderItems     AIDraftOrderItem[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId])
+  @@index([sku])
+  @@index([tenantId, isActive])
+  @@map("products")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ORDER — Core business entity
+// ─────────────────────────────────────────────────────────────────
+model Order {
+  id               String      @id @default(uuid()) @db.Uuid
+  tenantId         String      @db.Uuid
+  customerId       String      @db.Uuid
+  orderNumber      String      // human-readable: ORD-2024-0001
+  status           OrderStatus @default(PENDING_AI)
+  totalAmount      Decimal     @default(0) @db.Decimal(12, 2)
+  aiConfidenceScore Float?
+
+  // Source of the order
+  source OrderSource @default(WHATSAPP)
+
+  // Delivery information
+  deliveryAddress  String?
+  requestedDate    DateTime?
+  notes            String?
+
+  // External system sync
+  woocommerceOrderId String?
+  shopifyOrderId     String?
+  syncedAt           DateTime?
+
+  // Human review metadata
+  reviewedByUserId String?   @db.Uuid
+  reviewedAt       DateTime?
+  reviewNotes      String?
+
+  // Link back to the AI draft that created this order
+  aiDraftOrderId String? @unique @db.Uuid
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  tenant       Tenant      @relation(fields: [tenantId], references: [id])
+  customer     Customer    @relation(fields: [customerId], references: [id])
+  items        OrderItem[]
+  aiDraftOrder AIDraftOrder? @relation(fields: [aiDraftOrderId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([customerId])
+  @@map("orders")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ORDER ITEM — Line items within an order
+// ─────────────────────────────────────────────────────────────────
+model OrderItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @db.Uuid
+  orderId   String  @db.Uuid
+  productId String  @db.Uuid
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+  subtotal  Decimal @db.Decimal(12, 2)
+
+  // Selected variant attributes (e.g. { "size": "M", "color": "white" })
+  selectedAttributes Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// WHATSAPP MESSAGE — Raw conversation data
+// ─────────────────────────────────────────────────────────────────
+model WhatsAppMessage {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
+  customerId  String?          @db.Uuid
+  phone       String           // sender/recipient phone number
+  messageText String?
+  direction   MessageDirection
+  messageType MessageType      @default(TEXT)
+  status      MessageStatus    @default(RECEIVED)
+
+  // Meta message ID for deduplication
+  externalMessageId String?    @unique
+
+  // Media attachment URL (for IMAGE/AUDIO types)
+  mediaUrl  String?
+  mediaType String?
+
+  // AI processing state
+  aiProcessed   Boolean  @default(false)
+  aiProcessedAt DateTime?
+
+  // Link to the AI processing log
+  aiProcessingLogId String? @db.Uuid
+
+  // Timestamps
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  tenant       Tenant            @relation(fields: [tenantId], references: [id])
+  customer     Customer?         @relation(fields: [customerId], references: [id])
+  conversation Conversation?     @relation(fields: [conversationId], references: [id])
+  conversationId String?         @db.Uuid
+  aiLogs       AIProcessingLog[]
+
+  @@index([tenantId])
+  @@index([phone])
+  @@index([tenantId, aiProcessed])
+  @@map("whatsapp_messages")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CONVERSATION — Multi-turn chat session state
+// ─────────────────────────────────────────────────────────────────
+model Conversation {
+  id         String             @id @default(uuid()) @db.Uuid
+  tenantId   String             @db.Uuid
+  customerId String             @db.Uuid
+  phone      String
+  status     ConversationStatus @default(ACTIVE)
+
+  // Current conversation state (for multi-turn order collection)
+  // Managed in Redis for real-time, persisted here for history
+  currentStage ConversationStage @default(ACTIVE)
+
+  // Partial order data being collected across turns
+  partialOrderData Json?
+
+  startedAt  DateTime  @default(now())
+  lastMessageAt DateTime @default(now())
+  endedAt    DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+  customer Customer          @relation(fields: [customerId], references: [id])
+  messages WhatsAppMessage[]
+
+  @@unique([tenantId, phone, status])
+  @@index([tenantId])
+  @@index([phone])
+  @@map("conversations")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AI PROCESSING LOG — Full pipeline trace (critical for debugging)
+// Every AI call is logged: input, output, model, stage, latency
+// ─────────────────────────────────────────────────────────────────
+model AIProcessingLog {
+  id        String         @id @default(uuid()) @db.Uuid
+  tenantId  String         @db.Uuid
+  messageId String?        @db.Uuid
+
+  stage          AIProcessingStage
+  inputData      Json   // exact input sent to AI
+  outputData     Json   // exact output received from AI
+  modelUsed      String // e.g. "gemini-1.5-flash"
+  promptVersion  String @default("1.0.0")
+
+  // Performance
+  processingTimeMs Int
+  tokenCount       Int?
+
+  // Confidence sub-scores
+  intentConfidence       Float?
+  productMatchConfidence Float?
+  completenessScore      Float?
+  overallConfidence      Float?
+
+  success   Boolean @default(true)
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  tenant  Tenant           @relation(fields: [tenantId], references: [id])
+  message WhatsAppMessage? @relation(fields: [messageId], references: [id])
+
+  @@index([tenantId])
+  @@index([messageId])
+  @@index([stage])
+  @@map("ai_processing_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AI DRAFT ORDER — Intermediate AI output awaiting owner approval
+// ─────────────────────────────────────────────────────────────────
+model AIDraftOrder {
+  id         String          @id @default(uuid()) @db.Uuid
+  tenantId   String          @db.Uuid
+  customerId String          @db.Uuid
+  messageId  String?         @db.Uuid
+
+  // Raw customer message that triggered this
+  customerMessage String
+
+  // Full AI-extracted structured data (JSONB)
+  structuredData Json
+
+  // AI confidence scores
+  intentConfidence       Float
+  productMatchConfidence Float
+  completenessScore      Float
+  overallConfidence      Float
+
+  status AIDraftStatus @default(PENDING)
+
+  // Human correction tracking (for AI improvement feedback loop)
+  // Stores the diff between AI extraction and human edit
+  humanCorrections Json?
+  correctedByUserId String? @db.Uuid
+  correctedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+  customer  Customer          @relation(fields: [customerId], references: [id])
+  items     AIDraftOrderItem[]
+  order     Order?            // created after approval
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("ai_draft_orders")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AI DRAFT ORDER ITEM — Line items within an AI draft
+// ─────────────────────────────────────────────────────────────────
+model AIDraftOrderItem {
+  id           String  @id @default(uuid()) @db.Uuid
+  tenantId     String  @db.Uuid
+  draftOrderId String  @db.Uuid
+  productId    String? @db.Uuid // null if AI couldn't match a product
+
+  // What the customer asked for (raw)
+  productQuery String
+
+  // What AI matched (may differ from productQuery)
+  matchedProductName String?
+  matchConfidence    Float?
+
+  quantity           Int
+  unitPrice          Decimal? @db.Decimal(12, 2)
+  selectedAttributes Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+  draftOrder AIDraftOrder @relation(fields: [draftOrderId], references: [id])
+  product    Product?     @relation(fields: [productId], references: [id])
+
+  @@index([tenantId])
+  @@index([draftOrderId])
+  @@map("ai_draft_order_items")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// INVENTORY TRANSACTION — Stock movement audit trail
+// ─────────────────────────────────────────────────────────────────
+model InventoryTransaction {
+  id              String              @id @default(uuid()) @db.Uuid
+  tenantId        String              @db.Uuid
+  productId       String              @db.Uuid
+  type            InventoryTxType
+  quantity        Int                 // positive = IN, negative = OUT
+  referenceOrderId String?            @db.Uuid
+  notes           String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([tenantId])
+  @@index([productId])
+  @@index([createdAt])
+  @@map("inventory_transactions")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// NOTIFICATION — All outbound notifications
+// ─────────────────────────────────────────────────────────────────
+model Notification {
+  id       String           @id @default(uuid()) @db.Uuid
+  tenantId String           @db.Uuid
+  userId   String?          @db.Uuid
+  type     NotificationType
+  channel  NotificationChannel
+  title    String
+  message  String           @db.Text
+  status   NotificationStatus @default(PENDING)
+
+  // Metadata (e.g. email recipient, WhatsApp phone, template ID)
+  metadata Json?
+
+  sentAt     DateTime?
+  failedAt   DateTime?
+  failReason String?
+  retryCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("notifications")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AUDIT LOG — Immutable append-only action log
+// NEVER update or delete records in this table
+// ─────────────────────────────────────────────────────────────────
+model AuditLog {
+  id          String @id @default(uuid()) @db.Uuid
+  tenantId    String @db.Uuid
+  actorUserId String? @db.Uuid // null for system actions
+  actorType   String @default("USER") // USER | SYSTEM | AI
+
+  // What happened
+  action     String // e.g. "ORDER_APPROVED", "AI_ORDER_EXTRACTED"
+  entityType String // e.g. "Order", "Product", "Customer"
+  entityId   String @db.Uuid
+
+  // State change snapshot
+  beforeState Json? // null for CREATE actions
+  afterState  Json? // null for DELETE actions
+
+  // Request context
+  ipAddress     String?
+  userAgent     String?
+  correlationId String?
+
+  // Immutable timestamp
+  timestamp DateTime @default(now())
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  actor  User?  @relation(fields: [actorUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, timestamp])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────
+
+enum TenantPlan {
+  STARTER
+  BUSINESS
+  ENTERPRISE
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  OWNER
+  STAFF
+}
+
+enum OrderStatus {
+  PENDING_AI        // Received, AI not yet processed
+  WAITING_APPROVAL  // AI processed, awaiting owner review
+  APPROVED          // Owner approved
+  REJECTED          // Owner rejected
+  SYNCED            // Successfully created in e-commerce system
+  FAILED            // Sync to e-commerce failed
+  CANCELLED         // Cancelled after approval
+}
+
+enum OrderSource {
+  WHATSAPP
+  MANUAL
+  API
+}
+
+enum MessageDirection {
+  INBOUND   // Customer → System
+  OUTBOUND  // System → Customer
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  STICKER
+  LOCATION
+}
+
+enum MessageStatus {
+  RECEIVED
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum ConversationStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+  BLOCKED
+}
+
+enum ConversationStage {
+  ACTIVE
+  GATHERING_INFO
+  CONFIRMING
+  PENDING_ORDER
+  CLOSED
+  ABANDONED
+}
+
+enum AIProcessingStage {
+  INTENT_DETECTION
+  PRODUCT_RETRIEVAL
+  ENTITY_EXTRACTION
+  CONFIDENCE_SCORING
+  DRAFT_ORDER_GENERATION
+  CONFLICT_RESOLUTION
+}
+
+enum AIDraftStatus {
+  PENDING   // Awaiting owner review
+  REVIEWED  // Owner opened it
+  APPROVED  // Owner approved → Order created
+  REJECTED  // Owner rejected
+  EXPIRED   // Not reviewed within time limit
+}
+
+enum InventoryTxType {
+  IN          // Stock received
+  OUT         // Stock deducted (order fulfilled)
+  ADJUSTMENT  // Manual correction
+  RETURN      // Customer return
+}
+
+enum NotificationType {
+  ORDER_PENDING_APPROVAL
+  ORDER_APPROVED
+  ORDER_REJECTED
+  ORDER_SYNCED
+  LOW_STOCK_ALERT
+  AI_PROCESSING_FAILED
+  CUSTOMER_CONFIRMATION
+  SYSTEM_ALERT
+}
+
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+  SYSTEM
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum WhatsAppProvider {
+  MOCK
+  META_CLOUD_API
+}
+
+enum EcommerceProvider {
+  MOCK
+  WOOCOMMERCE
+  SHOPIFY
+}

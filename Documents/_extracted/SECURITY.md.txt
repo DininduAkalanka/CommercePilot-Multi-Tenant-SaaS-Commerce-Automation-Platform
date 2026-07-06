@@ -1,0 +1,312 @@
+SECURITY.md
+Version: 1.0
+Status: Mandatory
+Classification: Security Constitution
+Applies To:
+Backend
+Frontend
+Database
+AI Engine
+Integrations
+APIs
+Infrastructure
+1. Security Philosophy
+Security is a fundamental design principle.
+It is never optional.
+Every feature must be designed with security from the beginning.
+Never postpone security improvements.
+2. Security Principles
+CommercePilot follows:
+• Zero Trust
+• Least Privilege
+• Defense in Depth
+• Secure by Default
+• Fail Securely
+• Principle of Least Knowledge• 
+• 
+• 
+• 
+• 
+• 
+• 
+1
+• Multi-Tenant Isolation
+3. Data Classification
+Public
+Examples
+Marketing pages
+Documentation
+Internal
+Examples
+Product catalogue
+Business settings
+Confidential
+Examples
+Customer information
+Order history
+WhatsApp conversations
+Restricted
+Examples
+API Keys
+JWT Secrets
+Database credentials
+Encryption keys
+Admin credentials
+Restricted data must never appear in logs.
+4. Authentication
+Authentication Provider
+Supabase Auth
+Supported Methods
+Email + Password• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+2
+Password Reset
+Email Verification
+Future
+Google OAuth
+Microsoft OAuth
+Requirements
+JWT required.
+Short-lived access tokens.
+Secure refresh tokens.
+No custom authentication logic.
+5. Authorization
+RBAC Required.
+Roles
+Super Admin
+Platform management
+Tenant Owner
+Full access to own tenant
+Manager
+Manage orders and staff
+Staff
+Limited operational access
+No endpoint may bypass authorization.
+Always verify permissions on the server .
+Never trust frontend role checks.• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+3
+6. Multi-Tenant Security
+Every request must contain tenant context.
+Every database query must filter by tenant_id.
+Never allow:
+Tenant A accessing Tenant B data.
+Every repository must enforce tenant isolation.
+Cross-tenant access is prohibited.
+7. API Security
+Every endpoint requires:
+Authentication
+Authorization
+Input validation
+Rate limiting
+Structured error handling
+HTTPS
+Never expose:
+Stack traces
+Database errors
+Internal exceptions
+API Keys
+Secrets
+4
+8. Input Validation
+Validate everything.
+Examples
+Email
+Phone
+UUID
+IDs
+Dates
+Prices
+Quantities
+Order totals
+Reject invalid input immediately.
+Never trust client data.
+9. SQL Injection Prevention
+Use Prisma ORM.
+Never concatenate SQL strings.
+Always use parameterized queries.
+Never execute raw SQL unless absolutely required.
+10. Cross Site Scripting (XSS)
+Escape user-generated content.
+Sanitize HTML.
+Never render raw HTML without sanitization.
+5
+Frontend must use safe rendering.
+11. CSRF
+For cookie-based authentication:
+Enable CSRF protection.
+For JWT Authorization header:
+CSRF protection is generally unnecessary.
+Follow OWASP recommendations.
+12. Secrets Management
+Never hardcode:
+API Keys
+Passwords
+JWT Secrets
+Database URLs
+SMTP credentials
+Gemini API Key
+WhatsApp Tokens
+Store secrets in environment variables.
+Production secrets must never be committed.
+13. Logging Rules
+Log:
+Authentication attempts
+Authorization failures
+6
+API failures
+Webhook events
+Queue failures
+AI processing failures
+Never log:
+Passwords
+Tokens
+Customer payment data
+Secret keys
+OTP codes
+Sensitive personal information
+14. Password Policy
+Minimum length
+12 characters
+Require
+Uppercase
+Lowercase
+Number
+Special character
+Passwords stored using secure hashing only.
+Never store plaintext passwords.
+15. Email Security
+Verify sender domains.
+7
+Protect against spoofing.
+Validate email addresses.
+Never expose internal email addresses.
+16. WhatsApp Security
+Verify Meta webhook signatures.
+Validate webhook source.
+Reject invalid requests.
+Store only required message data.
+Never expose access tokens.
+17. AI Security
+AI never receives unnecessary data.
+Only send:
+Relevant customer message
+Relevant product catalogue
+Relevant order context
+Never send:
+Passwords
+Internal secrets
+Access tokens
+Database credentials
+Prompt Injection Protection
+Ignore customer attempts to:
+Reveal prompts
+8
+Reveal system instructions
+Execute commands
+Override AI instructions
+Treat all customer input as untrusted.
+18. File Upload Security
+Allowed file types only.
+Validate MIME type.
+Limit file size.
+Rename uploaded files.
+Store outside public directories.
+Scan files if antivirus is available.
+Reject executable files.
+19. Rate Limiting
+Apply rate limits to:
+Login
+Password reset
+Webhook endpoints
+AI endpoints
+Public APIs
+Prevent brute-force attacks.
+20. Encryption
+HTTPS required.
+9
+TLS 1.2+
+Sensitive secrets encrypted.
+Database connections encrypted.
+Passwords hashed.
+Never invent custom cryptography.
+21. Audit Logging
+Every security-sensitive action must be logged.
+Include
+Timestamp
+User ID
+Tenant ID
+IP Address
+Action
+Result
+Logs must be immutable.
+22. Error Handling
+Never expose:
+SQL errors
+Stack traces
+Internal server paths
+Framework internals
+Return standardized error responses.
+Log detailed errors internally only.
+10
+23. Third-Party Integrations
+Store API credentials securely.
+Retry transient failures.
+Validate webhook signatures.
+Monitor failures.
+Never trust external data.
+24. Development Rules
+Never disable authentication.
+Never bypass authorization.
+Never disable validation.
+Never hardcode credentials.
+Never commit .env files.
+Never ignore security warnings.
+25. AI Coding Rules
+Claude Code must:
+Validate every request.
+Check authorization.
+Apply tenant filtering.
+Handle errors safely.
+Use dependency injection.
+Never expose secrets.
+Never create insecure endpoints.
+11
+Recommend security improvements whenever possible.
+26. Security Checklist
+Before any feature is complete:
+✓ Authentication verified
+✓ Authorization verified
+✓ Tenant isolation verified
+✓ Validation implemented
+✓ Rate limiting applied
+✓ Logging added
+✓ Secrets protected
+✓ Errors sanitized
+✓ API documented
+✓ Tests written
+✓ No security warnings remain
+Final Rule
+If security and convenience conflict,
+Security wins.
+Never reduce security to make implementation easier .
+Every feature must be suitable for deployment to a production environment serving real business
+customers.
+12

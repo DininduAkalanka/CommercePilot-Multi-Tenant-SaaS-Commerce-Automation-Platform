@@ -1,0 +1,249 @@
+PROJECT_CONTEXT.md
+CommercePilot
+Version:  1.0
+Document Type:  AI Context Engineering
+Status:  Source of Truth
+1. Project Identity
+Project Name
+CommercePilot
+Tagline
+AI Commerce Automation Platform for Existing E-commerce Businesses
+Project Type
+Multi-tenant SaaS Platform
+AI Automation Platform
+Plugin-based Commerce Integration Platform
+Final Year Computer Science Project
+Potential Commercial Startup
+2. Project Vision
+CommercePilot is an AI-powered commerce automation platform designed to integrate with existing e-
+commerce systems rather than replace them.
+The platform connects to an existing online store (WooCommerce, Shopify, or custom APIs), monitors
+customer communication channels such as WhatsApp, understands customer intent using Large
+Language Models, automates repetitive business processes, and assists business owners with
+intelligent order processing.
+1
+CommercePilot is not a chatbot.
+CommercePilot is an AI Employee.
+3. Mission
+Reduce manual work performed by online business owners through AI-driven workflow automation
+while maintaining full human control over critical business decisions.
+4. Problem Statement
+Many SMEs receive orders through WhatsApp instead of directly through their websites.
+Business owners manually:
+Read customer messages
+Extract order details
+Check inventory
+Create orders
+Send quotations
+Reply to customers
+Update inventory
+Notify staff
+This process is:
+Slow
+Error-prone
+Difficult to scale
+Expensive
+CommercePilot automates these repetitive tasks while allowing the owner to review and approve AI
+decisions when required.
+5. Target Users
+Primary Users
+Small Business Owners
+Medium-sized E-commerce Stores
+Textile Businesses
+Fashion Stores
+Electronics Stores
+Cosmetics Stores
+Gift Shops• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+2
+Secondary Users
+Sales Staff
+Customer Support Teams
+Warehouse Staff
+6. Core Philosophy
+The system must NEVER replace the business owner .
+The system assists the owner .
+Human approval always has higher authority than AI.
+AI recommendations are suggestions.
+The owner always has the final decision.
+7. Product Principles
+AI First
+Every repetitive task should be evaluated for automation.
+Human in the Loop
+Critical business decisions require owner approval unless explicitly configured otherwise.
+Existing Systems First
+CommercePilot never replaces existing e-commerce systems.
+CommercePilot extends them.
+Multi-Tenant by Design
+Every customer business is isolated.
+No tenant data may ever be accessible by another tenant.
+Tenant isolation is mandatory.• 
+• 
+• 
+1. 
+1. 
+1. 
+1. 
+3
+API First
+Every feature must be accessible through APIs.
+Internal communication should follow API contracts.
+Security First
+Security is designed into the architecture.
+Never added later .
+Production Ready
+Every implementation must be scalable.
+Temporary code is prohibited.
+8. Primary Features
+AI WhatsApp Order Processing
+AI Order Extraction
+Order Approval Dashboard
+WooCommerce Integration
+Shopify Integration (Future)
+Customer Conversation Management
+AI Confidence Scoring
+Business Analytics
+Workflow Automation
+Email Notifications
+Inventory Validation
+RAG Product Search
+Owner Approval Workflow1. 
+1. 
+1. 
+4
+Audit Logs
+9. MVP Scope
+Included
+✓ WhatsApp Integration
+✓ AI Order Extraction
+✓ WooCommerce Integration
+✓ Owner Dashboard
+✓ Email Notifications
+✓ Human Approval
+✓ PostgreSQL Database
+✓ Multi-Tenant Architecture
+✓ Authentication
+Excluded
+✗ Shopify
+✗ Facebook Messenger
+✗ Instagram
+✗ Mobile App
+✗ Sinhala NLP
+✗ Voice Order Processing
+These belong to future releases.
+10. Success Criteria
+The MVP is considered successful when:
+A customer sends a WhatsApp message.
+5
+↓
+AI understands the order .
+↓
+AI extracts structured information.
+↓
+Inventory is validated.
+↓
+The owner receives a notification.
+↓
+The owner approves the order .
+↓
+The order is automatically created inside WooCommerce.
+↓
+The customer receives confirmation.
+No manual data entry should be required.
+11. Non-Functional Requirements
+High Availability
+Scalable
+Secure
+Maintainable
+Modular
+Cloud Ready
+API Driven
+6
+Production Quality
+Well Tested
+Well Documented
+12. Architecture Principles
+Clean Architecture
+Domain Driven Design
+SOLID Principles
+Repository Pattern
+Dependency Injection
+Event Driven Processing
+Queue Based Background Jobs
+Multi-Tenant Isolation
+REST APIs
+Webhook Driven Integrations
+13. AI Principles
+The AI does not make business decisions.
+The AI recommends.
+The owner approves.
+The AI must never hallucinate products.
+The AI must use Retrieval-Augmented Generation (RAG) against the tenant's product catalog before
+making recommendations.
+Confidence scores must determine whether human review is required.
+7
+14. Technology Stack
+Frontend
+Next.js
+Backend
+NestJS
+Database
+PostgreSQL
+ORM
+Prisma
+Authentication
+Supabase Auth
+AI
+Gemini Flash (MVP)
+Future: Claude / OpenAI
+Automation
+BullMQ
+Redis
+Hosting
+Render
+Frontend Hosting
+Vercel
+Emails
+Resend
+Storage
+8
+Supabase Storage
+Vector Search
+pgvector
+15. Development Rules
+No shortcuts.
+No duplicate logic.
+No hardcoded secrets.
+No insecure code.
+No placeholder implementations.
+Every feature must include:
+Documentation
+Tests
+Error handling
+Logging
+Validation
+Security review
+16. Long-Term Vision
+CommercePilot becomes a plug-and-play AI automation platform that any e-commerce business can
+install in less than 30 minutes.
+The platform evolves into an AI operations layer capable of automating customer communication, order
+processing, business analytics, inventory intelligence, and workflow orchestration across multiple
+commerce platforms.
+9

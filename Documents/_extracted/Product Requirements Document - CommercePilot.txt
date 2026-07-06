@@ -1,0 +1,359 @@
+PRODUCT REQUIREMENTS DOCUMENT (PRD)
+Project:  CommercePilot
+Version:  1.0
+Status:  Approved
+Document Owner:  Product Team
+Project Type:  AI-Powered Multi-Tenant SaaS Platform
+1. Executive Summary
+CommercePilot is an AI-powered commerce automation platform designed to integrate with existing e-
+commerce systems such as WooCommerce, Shopify (future), and custom online stores.
+Instead of replacing existing platforms, CommercePilot acts as an intelligent automation layer that
+understands customer conversations, automates repetitive business processes, and assists business
+owners with AI-driven decision support while maintaining human approval over critical operations.
+The primary objective of the MVP is to automate WhatsApp-based order processing and synchronize
+approved orders with an existing WooCommerce store.
+2. Problem Statement
+Many SMEs receive customer orders through WhatsApp instead of directly through their websites.
+Business owners currently perform the following tasks manually:
+Reading customer messages
+Understanding customer intent
+Identifying requested products
+Checking inventory
+Creating orders manually
+Sending quotations
+Confirming payments
+Updating customers
+Maintaining order records
+This results in:
+Slow response times
+Human errors• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+1
+Lost orders
+High operational costs
+Poor customer experience
+3. Product Goal
+Build a production-ready AI automation platform capable of:
+Understanding customer messages
+Extracting structured order information
+Validating product availability
+Presenting AI-generated orders for owner approval
+Automatically creating approved orders in WooCommerce
+Sending customer confirmations
+Recording every action for auditing
+4. Target Users
+Primary Users
+SME business owners
+Online retailers
+Textile manufacturers
+Fashion stores
+Electronics shops
+Secondary Users
+Sales staff
+Customer support agents
+Warehouse operators
+System Users
+Super Admin
+Tenant Owner
+Staff Member
+5. MVP Scope
+Included
+Multi-tenant architecture
+Authentication
+WhatsApp Cloud API integration• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+2
+AI message understanding
+Product matching using RAG
+Order extraction
+Owner approval dashboard
+WooCommerce integration
+Email notifications
+Audit logs
+Activity history
+Excluded
+Shopify integration
+Facebook Messenger
+Instagram
+Mobile application
+Voice order processing
+Multi-language AI (Phase 2)
+6. Functional Requirements
+Authentication
+The system shall:
+Register business owners
+Authenticate users securely
+Support role-based access control
+Support tenant isolation
+WhatsApp Integration
+The system shall:
+Receive incoming messages
+Store message history
+Process text messages
+Track delivery status
+Queue AI processing
+AI Processing
+The AI shall:
+Detect customer intent
+Extract products• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+3
+Extract quantity
+Extract size
+Extract colour
+Extract delivery information
+Estimate confidence score
+Never invent products
+Use RAG against the tenant's product catalogue
+Order Management
+The system shall:
+Generate draft orders
+Allow owner review
+Approve or reject orders
+Synchronize approved orders with WooCommerce
+Record all changes
+Dashboard
+Provide:
+Pending AI orders
+Approved orders
+Rejected orders
+AI confidence
+Customer history
+Analytics
+Notifications
+The system shall:
+Send owner email notifications
+Send WhatsApp confirmations
+Notify on approval/rejection
+7. Non-Functional Requirements
+Production-ready architecture
+High availability
+Secure authentication
+Modular services
+REST API• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+4
+Event-driven processing
+Horizontal scalability
+Comprehensive logging
+Unit and integration tests
+API documentation
+8. User Stories
+US-001
+As a customer ,
+I want to place an order through WhatsApp,
+So that I do not need to visit the website.
+US-002
+As a business owner ,
+I want AI to summarize customer orders,
+So that I can approve them quickly.
+US-003
+As a business owner ,
+I want approved orders to appear automatically in WooCommerce,
+So that I do not need manual data entry.
+US-004
+As a staff member ,
+I want to see customer conversation history,
+So that I understand the order context.
+US-005
+As an administrator ,• 
+• 
+• 
+• 
+• 
+5
+I want complete audit logs,
+So that every action is traceable.
+9. Acceptance Criteria
+The MVP is complete when:
+✓ Customer sends WhatsApp message
+✓ AI extracts structured order
+✓ AI validates products using RAG
+✓ AI generates confidence score
+✓ Owner receives notification
+✓ Owner reviews order
+✓ Owner approves
+✓ WooCommerce order created automatically
+✓ Customer receives confirmation
+✓ Audit log recorded
+10. Business Rules
+AI cannot approve orders automatically unless explicitly enabled.
+Products must exist in the tenant catalogue.
+Every order belongs to one tenant.
+Every action must be logged.
+Business owners always have the final decision.
+Failed integrations must be retried.
+Sensitive customer data must be protected.
+11. Success Metrics
+Business Metrics
+80% reduction in manual order entry• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+6
+90% reduction in order processing time
+95% order extraction accuracy
+Customer response under 1 minute
+Technical Metrics
+API response < 500 ms
+AI processing < 10 seconds
+System uptime > 99%
+Zero cross-tenant data leakage
+12. Future Roadmap
+Phase 2
+Shopify integration
+Facebook Messenger
+Instagram DM
+Sinhala language support
+Voice message processing
+Phase 3
+Inventory prediction
+AI sales forecasting
+Marketing automation
+Courier integration
+Plugin marketplace
+13. Risks
+AI hallucinations
+Incorrect product matching
+API rate limits
+WhatsApp template restrictions
+Third-party API failures
+Mitigation:
+RAG
+Human approval
+Retry queues
+Audit logging
+Monitoring
+Confidence scoring• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+7
+14. Definition of Done
+A feature is complete only if:
+Business requirements satisfied
+Production-quality code
+Unit tests written
+Integration tests pass
+Documentation updated
+Security reviewed
+Error handling implemented
+Logging implemented
+Code reviewed
+No critical bugs remain• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+8
