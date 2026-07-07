@@ -17,8 +17,16 @@ async function bootstrap() {
   app.use(helmet());
 
   // ── CORS ────────────────────────────────────────────────────
+  // Strip ALL whitespace (spaces, newlines, tabs) that can sneak into
+  // FRONTEND_URL via copy-paste in a hosting dashboard. A URL never contains
+  // whitespace, and a stray one produces an invalid Access-Control-Allow-Origin
+  // header that 500s every request.
+  const frontendOrigin = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(
+    /\s+/g,
+    '',
+  );
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+    origin: frontendOrigin,
     credentials: true,
   });
 
