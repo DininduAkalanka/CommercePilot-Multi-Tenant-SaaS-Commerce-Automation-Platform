@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 import helmet from 'helmet';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { CorrelationInterceptor } from './common/interceptors/correlation.interceptor';
+import type { Request, Response } from 'express';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -23,6 +24,18 @@ async function bootstrap() {
 
   // ── Global Prefix ────────────────────────────────────────────
   app.setGlobalPrefix('api/v1');
+
+  // ── Root landing ─────────────────────────────────────────────
+  // Sits outside the /api/v1 prefix so opening the base URL returns useful
+  // info with a 200 instead of a 404 — this is an API, not a web page.
+  app.getHttpAdapter().getInstance().get('/', (_req: Request, res: Response) => {
+    res.json({
+      name: 'CommercePilot API',
+      status: 'ok',
+      documentation: '/api/docs',
+      health: '/api/v1/health',
+    });
+  });
 
   // ── Global Pipes ─────────────────────────────────────────────
   app.useGlobalPipes(

@@ -120,31 +120,45 @@ Each is 64 characters. Keep them private.
 
 ## 7. Step 4 — Deploy the backend (Render)
 
+> ⚠️ **Do NOT use the "Blueprint" option** — Render's Blueprint feature requires
+> a saved payment card. A normal **Web Service on the Free plan needs NO card.**
+> Use the manual steps below instead. (The `render.yaml` file stays in your repo
+> as documentation and for later use if you ever upgrade.)
+
 1. Go to https://render.com and sign up (Continue with GitHub).
-2. Click **New +** → **Blueprint**.
-3. Connect your GitHub and select the **CommercePilot** repository.
-4. Render reads the `render.yaml` I created and shows a service called
-   **commercepilot-api**. Click **Apply**.
-5. Render will ask you to fill in the secret environment variables (the ones
-   marked "sync: false"). Enter:
+2. Click **New +** → **Web Service** (NOT Blueprint).
+3. Connect your GitHub and select the **CommercePilot** repository → **Connect**.
+4. Fill in the settings:
+   - **Name:** `commercepilot-api`
+   - **Language / Runtime:** **Docker**
+   - **Branch:** `main`
+   - **Root Directory:** `backend`  ← important: this is where the Dockerfile lives
+   - **Instance Type:** **Free**
+5. Open the **Advanced** section → set **Health Check Path** to `/api/v1/health`.
+6. Add **Environment Variables** (click "Add Environment Variable" for each row):
 
    | Key | Value |
    |---|---|
+   | `NODE_ENV` | `production` |
    | `DATABASE_URL` | your Neon string from Step 1 |
    | `REDIS_URL` | your Upstash string from Step 2 |
    | `JWT_SECRET` | first key from Step 3 |
    | `ENCRYPTION_KEY` | second key from Step 3 |
    | `FRONTEND_URL` | `https://placeholder.vercel.app` (fix in Step 8) |
+   | `WHATSAPP_PROVIDER` | `mock` |
+   | `WOOCOMMERCE_PROVIDER` | `mock` |
+   | `EMAIL_PROVIDER` | `mailhog` |
 
-6. Click **Create / Apply**. Render builds the Docker image, runs the database
-   migrations automatically, and starts the API. First build takes ~5 minutes.
-7. When it's live, copy your backend URL from the top of the page, e.g.:
+7. Click **Create Web Service** (no card required on the Free plan). Render builds
+   the Docker image, runs the database migrations automatically, and starts the
+   API. First build takes ~5 minutes.
+8. When it's live, copy your backend URL from the top of the page, e.g.:
    ```
    https://commercepilot-api.onrender.com
    ```
    Your API base is that **plus `/api/v1`**:
    `https://commercepilot-api.onrender.com/api/v1`
-8. Test it: open `https://commercepilot-api.onrender.com/api/v1/health` in your
+9. Test it: open `https://commercepilot-api.onrender.com/api/v1/health` in your
    browser. You should see `{"status":"ok",...}`.
 
 ---
