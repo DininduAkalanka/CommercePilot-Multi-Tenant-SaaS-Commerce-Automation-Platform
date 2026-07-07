@@ -1,0 +1,57 @@
+# ─────────────────────────────────────────────────────────────────
+# Render Blueprint — CommercePilot API (backend only)
+#
+# PostgreSQL (Neon) and Redis (Upstash) live outside Render on their own free
+# tiers, so they are NOT declared here — they are wired via DATABASE_URL and
+# REDIS_URL below.
+#
+# Deploys are triggered by the GitHub Actions pipeline (Render Deploy Hook)
+# AFTER CI passes, so autoDeploy is disabled to avoid deploying untested code.
+# ─────────────────────────────────────────────────────────────────
+services:
+  - type: web
+    name: commercepilot-api
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health
+    autoDeploy: false
+    envVars:
+      # ── Non-secret defaults (safe to keep in the blueprint) ──────────
+      - key: NODE_ENV
+        value: production
+      - key: APP_NAME
+        value: CommercePilot
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: WHATSAPP_PROVIDER
+        value: mock
+      - key: WOOCOMMERCE_PROVIDER
+        value: mock
+      # Emails fail gracefully (recorded as FAILED, never crash a request) when
+      # no SMTP is reachable. Set up Resend/SMTP later for real delivery.
+      - key: EMAIL_PROVIDER
+        value: mailhog
+
+      # ── Secrets — set these in the Render dashboard (sync: false) ────
+      - key: DATABASE_URL      # Neon pooled connection string (sslmode=require)
+        sync: false
+      - key: REDIS_URL         # Upstash rediss://default:PASSWORD@host:6379
+        sync: false
+      - key: JWT_SECRET        # openssl rand -hex 32
+        sync: false
+      - key: ENCRYPTION_KEY    # openssl rand -hex 32
+        sync: false
+      - key: FRONTEND_URL      # https://your-app.vercel.app  (CORS + email links)
+        sync: false
+
+      # ── Optional — leave unset to use the built-in mock/no-op paths ──
+      - key: GEMINI_API_KEY    # unset → free mock AI extractor
+        sync: false
+      - key: SENTRY_DSN        # unset → error tracking disabled (see DEPLOYMENT.md)
+        sync: false

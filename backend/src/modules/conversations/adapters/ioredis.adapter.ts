@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { IRedisService } from '../interfaces/redis-service.interface';
+import { buildRedisConnection } from '../../../common/redis/redis.util';
 
 /**
  * IoRedisAdapter
@@ -20,13 +21,19 @@ export class IoRedisAdapter implements IRedisService, OnModuleInit, OnModuleDest
   constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
-    this.client = new Redis({
-      host: this.configService.get<string>('REDIS_HOST', 'localhost'),
-      port: this.configService.get<number>('REDIS_PORT', 6379),
+    const connection = buildRedisConnection(this.configService);
+    const options = {
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
       lazyConnect: false,
-    });
+    };
+
+    // A string connection is a full URL (managed Redis, TLS auto-detected from
+    // the rediss:// scheme); an object is discrete host/port for local dev.
+    this.client =
+      typeof connection === 'string'
+        ? new Redis(connection, options)
+        : new Redis({ ...connection, ...options });
 
     this.client.on('connect', () => {
       this.logger.log('Redis connected');

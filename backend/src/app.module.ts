@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { BullModule } from '@nestjs/bull';
+import { buildRedisConnection } from './common/redis/redis.util';
 import { DatabaseModule } from './common/database/database.module';
 import { CommonModule } from './common/common.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -18,6 +19,7 @@ import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.
 import { UsersModule } from './modules/users/users.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { HealthModule } from './modules/health/health.module';
 /**
  * AppModule — Root module
  *
@@ -44,11 +46,8 @@ import { AdminModule } from './modules/admin/admin.module';
     // ── Bull Queue (Global) ──────────────────────────────────────
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        redis: {
-          host: configService.get<string>('REDIS_HOST', 'localhost'),
-          port: configService.get<number>('REDIS_PORT', 6379),
-        },
+      useFactory: (configService: ConfigService) => ({
+        redis: buildRedisConnection(configService),
       }),
       inject: [ConfigService],
     }),
