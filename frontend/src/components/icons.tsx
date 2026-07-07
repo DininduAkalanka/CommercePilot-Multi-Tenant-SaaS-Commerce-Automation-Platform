@@ -178,6 +178,16 @@ export function Zap(p: IconProps) {
   );
 }
 
+// Brand mark — an up-right paper plane (used for the CommercePilot logo/favicon).
+export function PaperPlane(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M22 2 15 22 11 13 2 9 22 2Z" />
+      <path d="M22 2 11 13" />
+    </Svg>
+  );
+}
+
 export function Menu(p: IconProps) {
   return (
     <Svg {...p}>

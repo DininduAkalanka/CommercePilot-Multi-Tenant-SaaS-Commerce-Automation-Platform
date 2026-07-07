@@ -14,7 +14,7 @@ import {
   LogOut,
   Bell,
   ChevronDown,
-  Zap,
+  PaperPlane,
   Menu,
   X,
   Loader2,
@@ -125,7 +125,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             justifyContent: 'center', flexShrink: 0,
           }}
         >
-          <Zap size={18} color="var(--ink-on-brand)" strokeWidth={2.5} />
+          <PaperPlane size={18} color="var(--ink-on-brand)" strokeWidth={2.5} />
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 650, fontSize: '0.9375rem', letterSpacing: '-0.01em', lineHeight: 1.1 }}>

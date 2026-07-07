@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Zap, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, Building2, User } from '../../components/icons';
+import { PaperPlane, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, Building2, User } from '../../components/icons';
 import { useAuth } from '../../lib/auth-context';
 
 // Mirrors the backend's SECURITY.md §14 policy (min 12 chars, upper, lower,
@@ -48,7 +48,7 @@ export default function RegisterPage() {
       <aside className="auth-brand stack" style={{ justifyContent: 'space-between', padding: 'clamp(40px, 5vw, 64px)', background: 'var(--surface-1)', borderRight: '1px solid var(--line)' }}>
         <div className="row" style={{ gap: 11 }}>
           <div className="row" style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--brand)', justifyContent: 'center' }}>
-            <Zap size={17} color="var(--ink-on-brand)" strokeWidth={2.5} />
+            <PaperPlane size={17} color="var(--ink-on-brand)" strokeWidth={2.5} />
           </div>
           <span style={{ fontWeight: 600, fontSize: '0.9375rem', letterSpacing: '-0.01em' }}>CommercePilot</span>
         </div>
@@ -69,7 +69,7 @@ export default function RegisterPage() {
         <div className="animate-fade-in stack" style={{ width: '100%', maxWidth: 380, gap: 28 }}>
           <div className="auth-mobile-brand row" style={{ gap: 11 }}>
             <div className="row" style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--brand)', justifyContent: 'center' }}>
-              <Zap size={17} color="var(--ink-on-brand)" strokeWidth={2.5} />
+              <PaperPlane size={17} color="var(--ink-on-brand)" strokeWidth={2.5} />
             </div>
             <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>CommercePilot</span>
           </div>
