@@ -82,6 +82,9 @@ import { HealthModule } from './modules/health/health.module';
     UsersModule,
     AuditLogsModule,
     AdminModule,
+
+    // ── Ops: liveness/readiness probes for hosting + monitoring ──────
+    HealthModule,
   ],
 })
 export class AppModule {}

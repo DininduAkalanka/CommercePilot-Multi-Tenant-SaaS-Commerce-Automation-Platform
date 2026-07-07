@@ -119,10 +119,11 @@ export default function DashboardPage() {
     );
   }
 
+  // Real AI metrics from /orders/analytics — 0% on a fresh account, real values
+  // once orders are processed. Never hardcoded.
   const aiEngine = [
-    { label: 'Intent Detection', score: 98 },
-    { label: 'Product Matching', score: 91 },
-    { label: 'Order Completeness', score: 87 },
+    { label: 'Avg AI Confidence', score: Math.round(analytics?.aiConfidenceAvg ?? 0) },
+    { label: 'Approval Rate', score: Math.round(analytics?.approvalRate ?? 0) },
   ];
 
   return (
@@ -211,7 +212,7 @@ export default function DashboardPage() {
         {/* Right rail */}
         <div className="stack" style={{ gap: 16 }}>
           <div className="card" style={{ padding: 20 }}>
-            <h3 className="t-eyebrow" style={{ marginBottom: 16 }}>AI Engine Status</h3>
+            <h3 className="t-eyebrow" style={{ marginBottom: 16 }}>AI Performance</h3>
             <div className="stack" style={{ gap: 14 }}>
               {aiEngine.map((item) => (
                 <div key={item.label}>
