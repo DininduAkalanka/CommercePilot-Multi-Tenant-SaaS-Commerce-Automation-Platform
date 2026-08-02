@@ -5,9 +5,14 @@ import { AppModule } from './app.module';
 import helmet from 'helmet';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { CorrelationInterceptor } from './common/interceptors/correlation.interceptor';
+import { initObservability } from './common/observability/sentry';
 import type { Request, Response } from 'express';
 
 async function bootstrap() {
+  // Before anything else: the SDK instruments HTTP and DB clients as they are
+  // loaded, so initialising after NestFactory.create would miss most of them.
+  initObservability();
+
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug'],

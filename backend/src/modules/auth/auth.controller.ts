@@ -28,11 +28,28 @@ import type { JwtPayload } from './interfaces/jwt-payload.interface';
  */
 /**
  * Credential endpoints are unauthenticated and directly guessable, so they get
- * a far tighter ceiling than the global 100/min: 5 attempts per minute per IP.
- * This overrides the 'long' bucket for these handlers only — the global
- * 'short' burst limit still applies on top.
+ * a far tighter ceiling than the global 100/min: 5 attempts per minute per IP
+ * by default. This overrides the 'long' bucket for these handlers only — the
+ * global 'short' burst limit still applies on top.
+ *
+ * Configurable because one fixed number cannot suit every deployment:
+ *   - the E2E suite registers a fresh tenant per test and legitimately needs
+ *     more than five requests a minute from one address;
+ *   - offices behind NAT and mobile carriers behind CGNAT share a single
+ *     public IP across many real users.
+ *
+ * Read from process.env rather than ConfigService because decorators are
+ * evaluated at class-definition time, before ConfigModule has loaded .env.
+ * These must therefore be REAL environment variables (as Render and CI
+ * provide them) — putting them only in a .env file will not take effect.
+ * The defaults are the secure ones, so an unset variable is always safe.
  */
-const CREDENTIAL_RATE_LIMIT = { long: { limit: 5, ttl: 60_000 } };
+const CREDENTIAL_RATE_LIMIT = {
+  long: {
+    limit: Number(process.env.AUTH_RATE_LIMIT ?? 5),
+    ttl: Number(process.env.AUTH_RATE_TTL_MS ?? 60_000),
+  },
+};
 
 @ApiTags('Authentication')
 @Controller('auth')

@@ -9,8 +9,28 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+/**
+ * Coerce a numeric field that may arrive as a string.
+ *
+ * Prisma serialises `Decimal` columns to JSON strings, so a price the API
+ * returned as "25.00" comes straight back from the dashboard as a string.
+ * The global ValidationPipe sets `enableImplicitConversion`, but that relies
+ * on the emitted design:type — and for a union like `number | null` TypeScript
+ * emits `Object`, so no conversion happens and `@IsNumber()` rejects the value.
+ *
+ * null/undefined/'' are passed through untouched so `@IsOptional()` still sees
+ * them as absent; a bare `@Type(() => Number)` would turn null into 0 and
+ * silently zero out a price.
+ */
+const ToNumber = () =>
+  Transform(({ value }: { value: unknown }) =>
+    value === null || value === undefined || value === ''
+      ? value
+      : Number(value),
+  );
 
 /**
  * A single corrected line item.
@@ -40,17 +60,20 @@ export class CorrectedDraftItemDto {
 
   @ApiPropertyOptional({ description: 'Match confidence, 0..1' })
   @IsOptional()
+  @ToNumber()
   @IsNumber()
   @Min(0)
   match_confidence?: number;
 
   @ApiProperty({ description: 'Quantity ordered', minimum: 1 })
+  @ToNumber()
   @IsInt()
   @Min(1)
   quantity: number;
 
   @ApiPropertyOptional({ description: 'Unit price; defaults to catalog price' })
   @IsOptional()
+  @ToNumber()
   @IsNumber()
   @Min(0)
   unitPrice?: number | null;

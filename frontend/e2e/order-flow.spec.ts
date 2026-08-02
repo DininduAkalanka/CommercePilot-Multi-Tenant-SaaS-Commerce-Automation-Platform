@@ -24,7 +24,15 @@ test.describe('Core order flow', () => {
 
     // ── Add a real, in-stock product for the owner to (re-)assign during correction ──
     await page.goto('/dashboard/products');
-    await page.getByRole('button', { name: /add product/i }).click();
+    // `.first()` is required: the page renders an "Add product" button in the
+    // header AND another inside the empty-state card, and a freshly registered
+    // E2E tenant always has an empty catalog — so both are present and a bare
+    // getByRole is a strict-mode violation. The header button is first in DOM
+    // order; both open the same modal.
+    await page
+      .getByRole('button', { name: /add product/i })
+      .first()
+      .click();
     await page.getByPlaceholder('e.g. White School Shirt').fill('E2E Test Widget');
     await page.getByPlaceholder('0.00').fill('25.00');
     // Stock Quantity has no placeholder — it's the 2nd number input in the modal

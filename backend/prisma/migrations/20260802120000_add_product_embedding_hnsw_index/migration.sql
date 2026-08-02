@@ -1,0 +1,22 @@
+-- Approximate-nearest-neighbour index for RAG product retrieval.
+--
+-- ProductRetrieverService.vectorSearch orders by `embedding <=> $query`, the
+-- pgvector cosine-distance operator. Without a matching index Postgres has no
+-- choice but a sequential scan: it computes the distance for EVERY product in
+-- the tenant's catalog on every incoming WhatsApp message. That is acceptable
+-- at fifty products and unusable at fifty thousand.
+--
+-- `vector_cosine_ops` must match the operator used in the query (`<=>`).
+-- An index built for a different operator class is simply ignored.
+--
+-- HNSW (rather than IVFFlat) because it needs no training step and stays
+-- accurate as rows are inserted one at a time — which is how products arrive
+-- here, via WooCommerce sync. Defaults (m=16, ef_construction=64) are a sound
+-- starting point; raise ef_construction if recall proves insufficient.
+--
+-- Built non-concurrently on purpose: Prisma Migrate wraps each migration in a
+-- transaction, and CREATE INDEX CONCURRENTLY cannot run inside one. This takes
+-- a brief write lock on `products`, which is safe at current catalog sizes.
+-- If a tenant ever reaches millions of rows, build that index out-of-band.
+CREATE INDEX IF NOT EXISTS "products_embedding_hnsw_idx"
+  ON "products" USING hnsw ("embedding" vector_cosine_ops);

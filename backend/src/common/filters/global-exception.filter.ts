@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { captureException } from '../observability/sentry';
 
 /**
  * GlobalExceptionFilter
@@ -57,6 +58,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         `[${correlationId}] ${request.method} ${request.url} → ${status}: ${message}`,
         exception instanceof Error ? exception.stack : undefined,
       );
+
+      // Only 5xx is reported. 4xx is expected traffic — validation failures
+      // and unauthorised calls would bury genuine defects in noise.
+      captureException(exception, {
+        correlationId:
+          typeof correlationId === 'string' ? correlationId : undefined,
+        tenantId: (request as any)?.user?.tenantId as string | undefined,
+        path: request.url,
+      });
     } else {
       this.logger.warn(
         `[${correlationId}] ${request.method} ${request.url} → ${status}: ${message}`,
