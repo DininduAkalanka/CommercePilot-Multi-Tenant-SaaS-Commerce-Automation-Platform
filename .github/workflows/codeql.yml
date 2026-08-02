@@ -2,13 +2,32 @@ name: CodeQL
 
 # Static application security testing (SAST). Scans backend + frontend
 # JS/TS for security vulnerabilities on push, PR, and weekly.
+# ─────────────────────────────────────────────────────────────────
+# DISABLED on 2026-08-02 — not a code problem.
+#
+# GitHub code scanning requires Advanced Security on PRIVATE repositories.
+# This repo is private, so the analysis runs fine (132/132 TS files scanned)
+# and then fails at the upload step with:
+#
+#   Error: Code scanning is not enabled for this repository.
+#
+# That made every commit show a red X. A check that can never pass is worse
+# than no check: it trains you to ignore CI, which is exactly how a broken
+# deploy pipeline went unnoticed for 26 days here.
+#
+# It never gated deploys — `deploy-backend` only needs backend-ci and
+# frontend-ci — so disabling it changes nothing about what ships.
+#
+# TO RE-ENABLE: make the repository public (code scanning is free for public
+# repos) or enable GitHub Advanced Security, then restore the `push` and
+# `pull_request` triggers below.
+# ─────────────────────────────────────────────────────────────────
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  schedule:
-    - cron: '31 3 * * 1' # Mondays 03:31 UTC
+  # push:
+  #   branches: [main]
+  # pull_request:
+  #   branches: [main]
+  workflow_dispatch: # still runnable on demand once scanning is enabled
 
 jobs:
   analyze:
