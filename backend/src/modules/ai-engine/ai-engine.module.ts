@@ -20,4 +20,3 @@ import { ConflictResolverService } from './pipeline/conflict-resolver.service';
   exports: [AiEngineService, ProductRetrieverService, ConflictResolverService],
 })
 export class AiEngineModule {}
-

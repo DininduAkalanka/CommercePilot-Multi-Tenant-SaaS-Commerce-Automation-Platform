@@ -55,7 +55,9 @@ describe('WhatsAppService', () => {
 
   const mockWhatsAppAdapter = {
     sendTextMessage: jest.fn().mockResolvedValue(undefined),
-    simulateIncomingMessage: jest.fn().mockReturnValue({ messageId: 'sim-msg-1' }),
+    simulateIncomingMessage: jest
+      .fn()
+      .mockReturnValue({ messageId: 'sim-msg-1' }),
   };
 
   const mockQueue = {
@@ -106,15 +108,26 @@ describe('WhatsAppService', () => {
 
     it('should skip if no tenant found for phone number ID', async () => {
       const payload = {
-        entry: [{
-          changes: [{
-            field: 'messages',
-            value: {
-              metadata: { phone_number_id: 'unknown-phone' },
-              messages: [{ id: 'msg-1', from: '+94771234567', type: 'text', text: { body: 'hi' } }],
-            },
-          }],
-        }],
+        entry: [
+          {
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  metadata: { phone_number_id: 'unknown-phone' },
+                  messages: [
+                    {
+                      id: 'msg-1',
+                      from: '+94771234567',
+                      type: 'text',
+                      text: { body: 'hi' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
       };
 
       mockPrisma.tenant.findFirst.mockResolvedValue(null);

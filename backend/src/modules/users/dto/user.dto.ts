@@ -5,7 +5,6 @@ import {
   IsOptional,
   IsBoolean,
   IsEnum,
-  MinLength,
   MaxLength,
   Matches,
 } from 'class-validator';
@@ -24,7 +23,10 @@ const STRONG_PASSWORD =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
 
 export class CreateUserDto {
-  @ApiProperty({ example: 'Jane Staff', description: 'Full name of the team member' })
+  @ApiProperty({
+    example: 'Jane Staff',
+    description: 'Full name of the team member',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
@@ -36,7 +38,8 @@ export class CreateUserDto {
 
   @ApiProperty({
     example: 'Str0ng!Passw0rd',
-    description: 'Min 12 chars incl. upper, lower, number, special (SECURITY §14)',
+    description:
+      'Min 12 chars incl. upper, lower, number, special (SECURITY §14)',
     minLength: 12,
   })
   @IsString()
@@ -65,7 +68,10 @@ export class UpdateUserDto {
   @IsEnum(UserRole)
   role?: UserRole;
 
-  @ApiPropertyOptional({ example: true, description: 'Deactivate/reactivate the account' })
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Deactivate/reactivate the account',
+  })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;

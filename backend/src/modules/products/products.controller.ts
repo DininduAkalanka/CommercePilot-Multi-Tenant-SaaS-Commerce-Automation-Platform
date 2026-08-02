@@ -20,7 +20,12 @@ import { CurrentTenant } from '../../common/decorators/current-tenant.decorator'
 import { ProductsService } from './products.service';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
 import { UserRole } from '@prisma/client';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 
 @ApiTags('Products')
 @ApiBearerAuth()
@@ -39,7 +44,11 @@ export class ProductsController {
     @Body() dto: CreateProductDto,
   ) {
     const product = await this.productsService.createProduct(tenantId, dto);
-    return { success: true, message: 'Product created successfully', data: product };
+    return {
+      success: true,
+      message: 'Product created successfully',
+      data: product,
+    };
   }
 
   @Get()
@@ -49,16 +58,17 @@ export class ProductsController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
-    const result = await this.productsService.getProducts(tenantId, page, limit);
+    const result = await this.productsService.getProducts(
+      tenantId,
+      page,
+      limit,
+    );
     return { success: true, data: result };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific product by ID' })
-  async getProduct(
-    @CurrentTenant() tenantId: string,
-    @Param('id') id: string,
-  ) {
+  async getProduct(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     const product = await this.productsService.getProduct(tenantId, id);
     return { success: true, data: product };
   }
@@ -72,7 +82,11 @@ export class ProductsController {
     @Body() dto: UpdateProductDto,
   ) {
     const product = await this.productsService.updateProduct(tenantId, id, dto);
-    return { success: true, message: 'Product updated successfully', data: product };
+    return {
+      success: true,
+      message: 'Product updated successfully',
+      data: product,
+    };
   }
 
   @Delete(':id')

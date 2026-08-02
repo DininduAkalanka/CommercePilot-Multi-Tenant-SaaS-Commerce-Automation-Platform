@@ -4,7 +4,12 @@ import { PrismaService } from '../../common/database/prisma.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 
 describe('AdminService', () => {
-  const tenant = { findMany: jest.fn(), count: jest.fn(), findUnique: jest.fn(), update: jest.fn() };
+  const tenant = {
+    findMany: jest.fn(),
+    count: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  };
   const user = { count: jest.fn() };
   const order = { count: jest.fn() };
   const product = { count: jest.fn() };
@@ -36,7 +41,12 @@ describe('AdminService', () => {
       tenant.count.mockResolvedValue(21);
 
       const res = await service.listTenants(1, 20);
-      expect(res.meta).toEqual({ page: 1, limit: 20, total: 21, totalPages: 2 });
+      expect(res.meta).toEqual({
+        page: 1,
+        limit: 20,
+        total: 21,
+        totalPages: 2,
+      });
     });
   });
 
@@ -49,13 +59,20 @@ describe('AdminService', () => {
     });
 
     it('suspends a tenant and writes a TENANT_SUSPENDED audit entry', async () => {
-      tenant.findUnique.mockResolvedValue({ id: 't1', isActive: true, name: 'Store' });
+      tenant.findUnique.mockResolvedValue({
+        id: 't1',
+        isActive: true,
+        name: 'Store',
+      });
       tenant.update.mockResolvedValue({ id: 't1', isActive: false });
 
       await service.setTenantStatus('admin-1', 't1', false);
 
       expect(tenant.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 't1' }, data: { isActive: false } }),
+        expect.objectContaining({
+          where: { id: 't1' },
+          data: { isActive: false },
+        }),
       );
       expect(auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({

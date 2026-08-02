@@ -9,10 +9,14 @@ import {
   HttpStatus,
   Logger,
   BadRequestException,
-  Param,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiExcludeEndpoint } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiExcludeEndpoint,
+} from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { WhatsAppService } from './whatsapp.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -48,7 +52,9 @@ export class WhatsAppController {
     @Query('hub.challenge') challenge: string,
     @Query('hub.verify_token') verifyToken: string,
   ): string {
-    const expectedToken = this.configService.get<string>('WHATSAPP_VERIFY_TOKEN');
+    const expectedToken = this.configService.get<string>(
+      'WHATSAPP_VERIFY_TOKEN',
+    );
 
     if (mode === 'subscribe' && verifyToken === expectedToken) {
       this.logger.log('WhatsApp webhook verified successfully');
@@ -82,7 +88,10 @@ export class WhatsAppController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Simulate a customer sending a WhatsApp message (Mock Provider only)' })
+  @ApiOperation({
+    summary:
+      'Simulate a customer sending a WhatsApp message (Mock Provider only)',
+  })
   async simulateMessage(
     @CurrentTenant() tenantId: string,
     @Body() body: { phone: string; message: string },
@@ -106,7 +115,9 @@ export class WhatsAppController {
   @Get('simulator/messages')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get recent simulated WhatsApp messages (Mock Provider only)' })
+  @ApiOperation({
+    summary: 'Get recent simulated WhatsApp messages (Mock Provider only)',
+  })
   async getSimulatorMessages(@CurrentTenant() tenantId: string) {
     const messages = await this.whatsappService.getSimulatorMessages(tenantId);
     return { success: true, data: messages };

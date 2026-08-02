@@ -28,9 +28,18 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
   private readonly accessToken: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.phoneNumberId = this.configService.get<string>('WHATSAPP_PHONE_NUMBER_ID', '');
-    this.accessToken = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN', '');
-    const apiVersion = this.configService.get<string>('WHATSAPP_API_VERSION', 'v18.0');
+    this.phoneNumberId = this.configService.get<string>(
+      'WHATSAPP_PHONE_NUMBER_ID',
+      '',
+    );
+    this.accessToken = this.configService.get<string>(
+      'WHATSAPP_ACCESS_TOKEN',
+      '',
+    );
+    const apiVersion = this.configService.get<string>(
+      'WHATSAPP_API_VERSION',
+      'v18.0',
+    );
     this.baseUrl = `https://graph.facebook.com/${apiVersion}`;
 
     if (!this.phoneNumberId || !this.accessToken) {
@@ -40,7 +49,10 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
     }
   }
 
-  async sendTextMessage(phone: string, message: string): Promise<SendMessageResult> {
+  async sendTextMessage(
+    phone: string,
+    message: string,
+  ): Promise<SendMessageResult> {
     return this.send({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
@@ -78,11 +90,15 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
       });
     } catch (error) {
       // Read receipts are best-effort — never fail the caller over one.
-      this.logger.warn(`Failed to mark message ${messageId} as read: ${this.errorMessage(error)}`);
+      this.logger.warn(
+        `Failed to mark message ${messageId} as read: ${this.errorMessage(error)}`,
+      );
     }
   }
 
-  private async send(body: Record<string, unknown>): Promise<SendMessageResult> {
+  private async send(
+    body: Record<string, unknown>,
+  ): Promise<SendMessageResult> {
     try {
       const data = await this.post(body);
       const messageId = this.extractMessageId(data);
@@ -100,19 +116,24 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
       throw new Error('WhatsApp Cloud API is not configured');
     }
 
-    const response = await fetch(`${this.baseUrl}/${this.phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.accessToken}`,
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      `${this.baseUrl}/${this.phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+    );
 
     const payload: unknown = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new Error(`Graph API ${response.status}: ${this.extractApiError(payload)}`);
+      throw new Error(
+        `Graph API ${response.status}: ${this.extractApiError(payload)}`,
+      );
     }
     return payload;
   }
@@ -122,7 +143,7 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
       typeof data === 'object' &&
       data !== null &&
       'messages' in data &&
-      Array.isArray((data as { messages: unknown }).messages)
+      Array.isArray(data.messages)
     ) {
       const first = (data as { messages: Array<{ id?: string }> }).messages[0];
       return first?.id;
@@ -135,7 +156,7 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
       typeof payload === 'object' &&
       payload !== null &&
       'error' in payload &&
-      typeof (payload as { error: unknown }).error === 'object'
+      typeof payload.error === 'object'
     ) {
       const err = (payload as { error: { message?: string } }).error;
       return err.message ?? 'Unknown Graph API error';

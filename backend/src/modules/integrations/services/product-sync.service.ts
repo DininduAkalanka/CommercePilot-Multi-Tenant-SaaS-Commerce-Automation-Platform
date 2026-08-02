@@ -56,7 +56,7 @@ export class ProductSyncService {
             price: p.price,
             stockQuantity: p.stockQuantity,
             isActive: p.isActive,
-            attributes: p.attributes as object,
+            attributes: p.attributes,
           },
         });
         productId = existing.id;
@@ -75,7 +75,7 @@ export class ProductSyncService {
             price: p.price,
             stockQuantity: p.stockQuantity,
             isActive: p.isActive,
-            attributes: p.attributes as object,
+            attributes: p.attributes,
           },
         });
         newCount++;
@@ -84,22 +84,35 @@ export class ProductSyncService {
       embeddedIds.push(productId);
     }
 
-    this.logger.log(`[${tenantId}] Product sync complete. New: ${newCount}, Updated: ${updateCount}`);
+    this.logger.log(
+      `[${tenantId}] Product sync complete. New: ${newCount}, Updated: ${updateCount}`,
+    );
 
     // Generate embeddings in background so we don't block the API response
     // In production, this should be dispatched to a BullMQ queue
-    this.logger.log(`[${tenantId}] Dispatching embedding generation for ${embeddedIds.length} products`);
+    this.logger.log(
+      `[${tenantId}] Dispatching embedding generation for ${embeddedIds.length} products`,
+    );
     Promise.allSettled(
-      embeddedIds.map((id) => this.productRetriever.generateAndStoreEmbedding(id, tenantId)),
+      embeddedIds.map((id) =>
+        this.productRetriever.generateAndStoreEmbedding(id, tenantId),
+      ),
     ).then((results) => {
       const failures = results.filter((r) => r.status === 'rejected');
       if (failures.length > 0) {
-        this.logger.error(`[${tenantId}] Failed to generate embeddings for ${failures.length} products`);
+        this.logger.error(
+          `[${tenantId}] Failed to generate embeddings for ${failures.length} products`,
+        );
       } else {
         this.logger.log(`[${tenantId}] Embeddings generated successfully`);
       }
     });
 
-    return { success: true, newCount, updateCount, totalProcessed: products.length };
+    return {
+      success: true,
+      newCount,
+      updateCount,
+      totalProcessed: products.length,
+    };
   }
 }

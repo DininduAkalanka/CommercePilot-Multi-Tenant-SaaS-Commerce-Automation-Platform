@@ -52,7 +52,11 @@ export class UsersController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
-    const { data, meta } = await this.usersService.findAll(tenantId, page, limit);
+    const { data, meta } = await this.usersService.findAll(
+      tenantId,
+      page,
+      limit,
+    );
     return { success: true, data, meta };
   }
 
@@ -84,7 +88,10 @@ export class UsersController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update a team member (name, role, active status)' })
   @ApiResponse({ status: 200, description: 'User updated' })
-  @ApiResponse({ status: 400, description: 'Business-rule violation (e.g. last owner)' })
+  @ApiResponse({
+    status: 400,
+    description: 'Business-rule violation (e.g. last owner)',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   async update(
     @CurrentUser('tenantId') tenantId: string,
@@ -99,7 +106,10 @@ export class UsersController {
   @Delete(':id')
   @ApiOperation({ summary: 'Soft-delete a team member' })
   @ApiResponse({ status: 200, description: 'User removed' })
-  @ApiResponse({ status: 400, description: 'Business-rule violation (e.g. last owner)' })
+  @ApiResponse({
+    status: 400,
+    description: 'Business-rule violation (e.g. last owner)',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   async remove(
     @CurrentUser('tenantId') tenantId: string,

@@ -9,7 +9,7 @@ import {
   PROMPT_VERSION,
   PROMPT_VERSION_V2,
 } from '../prompts/system.prompts';
-import { AIProcessingStage } from '@prisma/client';
+import { AIProcessingStage, Prisma } from '@prisma/client';
 
 export interface ExtractedItem {
   product_query: string;
@@ -74,7 +74,11 @@ export class EntityExtractorService {
       : ENTITY_EXTRACTION_SYSTEM_PROMPT;
 
     const userPrompt = isMultiTurn
-      ? MULTI_TURN_ENTITY_EXTRACTION_USER_PROMPT(conversationHistory, messageText, catalogContext)
+      ? MULTI_TURN_ENTITY_EXTRACTION_USER_PROMPT(
+          conversationHistory,
+          messageText,
+          catalogContext,
+        )
       : ENTITY_EXTRACTION_USER_PROMPT(messageText, catalogContext);
 
     const promptVersion = isMultiTurn ? PROMPT_VERSION_V2 : PROMPT_VERSION;
@@ -112,8 +116,14 @@ export class EntityExtractorService {
         tenantId,
         messageId,
         stage: AIProcessingStage.ENTITY_EXTRACTION,
-        inputData: { message: messageText, catalogContext, conversationHistory, systemPrompt, userPrompt },
-        outputData: result as object,
+        inputData: {
+          message: messageText,
+          catalogContext,
+          conversationHistory,
+          systemPrompt,
+          userPrompt,
+        },
+        outputData: result as unknown as Prisma.InputJsonValue,
         modelUsed: response.modelUsed,
         promptVersion,
         processingTimeMs,

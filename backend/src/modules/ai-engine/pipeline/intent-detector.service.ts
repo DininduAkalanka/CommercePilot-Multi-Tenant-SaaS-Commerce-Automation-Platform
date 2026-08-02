@@ -6,7 +6,7 @@ import {
   INTENT_DETECTION_USER_PROMPT,
   PROMPT_VERSION,
 } from '../prompts/system.prompts';
-import { AIProcessingStage } from '@prisma/client';
+import { AIProcessingStage, Prisma } from '@prisma/client';
 
 export type CustomerIntent =
   | 'ORDER'
@@ -65,13 +65,19 @@ export class IntentDetectorService {
 
     if (response.success && response.text) {
       try {
-        result = this.gemini.parseJsonResponse<IntentDetectionResult>(response.text);
+        result = this.gemini.parseJsonResponse<IntentDetectionResult>(
+          response.text,
+        );
       } catch {
         this.logger.warn('Failed to parse intent JSON, defaulting to OTHER');
         result = { intent: 'OTHER', confidence: 0, reasoning: 'Parse error' };
       }
     } else {
-      result = { intent: 'OTHER', confidence: 0, reasoning: response.error ?? 'AI error' };
+      result = {
+        intent: 'OTHER',
+        confidence: 0,
+        reasoning: response.error ?? 'AI error',
+      };
     }
 
     // Log this AI processing stage
@@ -81,7 +87,7 @@ export class IntentDetectorService {
         messageId,
         stage: AIProcessingStage.INTENT_DETECTION,
         inputData: { message: messageText, systemPrompt, userPrompt },
-        outputData: result as object,
+        outputData: result as unknown as Prisma.InputJsonValue,
         modelUsed: response.modelUsed,
         promptVersion: PROMPT_VERSION,
         processingTimeMs,

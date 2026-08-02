@@ -82,7 +82,10 @@ describe('CustomersService', () => {
 
       expect(mockPrisma.customer.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ tenantId: 'tenant-1', deletedAt: null }),
+          where: expect.objectContaining({
+            tenantId: 'tenant-1',
+            deletedAt: null,
+          }),
         }),
       );
     });
@@ -130,17 +133,17 @@ describe('CustomersService', () => {
     it('should throw NotFoundException for missing customer', async () => {
       mockPrisma.customer.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.findOne('tenant-1', 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('tenant-1', 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should not return customer from a different tenant', async () => {
       mockPrisma.customer.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.findOne('tenant-2', 'cust-1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('tenant-2', 'cust-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -148,7 +151,11 @@ describe('CustomersService', () => {
 
   describe('findCustomerOrders', () => {
     it('should return orders for a valid customer', async () => {
-      const mockCustomer = { id: 'cust-1', tenantId: 'tenant-1', deletedAt: null };
+      const mockCustomer = {
+        id: 'cust-1',
+        tenantId: 'tenant-1',
+        deletedAt: null,
+      };
       const mockOrders = [{ id: 'ord-1', customerId: 'cust-1' }];
 
       mockPrisma.customer.findFirst.mockResolvedValue(mockCustomer);
@@ -159,7 +166,11 @@ describe('CustomersService', () => {
       expect(result).toEqual(mockOrders);
       expect(mockPrisma.order.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { customerId: 'cust-1', tenantId: 'tenant-1', deletedAt: null },
+          where: {
+            customerId: 'cust-1',
+            tenantId: 'tenant-1',
+            deletedAt: null,
+          },
         }),
       );
     });
@@ -177,7 +188,11 @@ describe('CustomersService', () => {
 
   describe('findCustomerMessages', () => {
     it('should return reversed messages for a chronological timeline', async () => {
-      const mockCustomer = { id: 'cust-1', tenantId: 'tenant-1', deletedAt: null };
+      const mockCustomer = {
+        id: 'cust-1',
+        tenantId: 'tenant-1',
+        deletedAt: null,
+      };
       const mockMessages = [
         { id: 'msg-2', messageText: 'Second' },
         { id: 'msg-1', messageText: 'First' },

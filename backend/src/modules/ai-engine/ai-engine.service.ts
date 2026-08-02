@@ -6,7 +6,7 @@ import { IntentDetectorService } from './pipeline/intent-detector.service';
 import { ProductRetrieverService } from './pipeline/product-retriever.service';
 import { EntityExtractorService } from './pipeline/entity-extractor.service';
 import { ConfidenceScorerService } from './pipeline/confidence-scorer.service';
-import { AIDraftStatus, AIProcessingStage } from '@prisma/client';
+import { AIDraftStatus, AIProcessingStage, Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 export interface ProcessMessageInput {
@@ -64,7 +64,9 @@ export class AiEngineService {
    * Process a WhatsApp message through the full AI pipeline.
    * Returns routing decision and draft order ID if applicable.
    */
-  async processMessage(input: ProcessMessageInput): Promise<ProcessMessageOutput> {
+  async processMessage(
+    input: ProcessMessageInput,
+  ): Promise<ProcessMessageOutput> {
     const pipelineStart = Date.now();
 
     this.logger.log(
@@ -101,7 +103,9 @@ export class AiEngineService {
     );
 
     if (products.length === 0) {
-      this.logger.warn(`[${input.tenantId}] No products found in catalog for RAG`);
+      this.logger.warn(
+        `[${input.tenantId}] No products found in catalog for RAG`,
+      );
     }
 
     // ── Stage 3: Entity Extraction ───────────────────────────────
@@ -131,13 +135,17 @@ export class AiEngineService {
 
     if (confidenceScores.routing === 'gather_more_info') {
       // Generate a follow-up question asking for missing info
-      followUpQuestion = await this.generateFollowUpQuestion(
+      followUpQuestion = this.generateFollowUpQuestion(
         extractedOrder.missing_fields,
         extractedOrder.items[0]?.matched_product_name ?? 'the items',
       );
     } else {
       // Create the draft order for owner review
-      draftOrderId = await this.createDraftOrder(input, extractedOrder, confidenceScores);
+      draftOrderId = await this.createDraftOrder(
+        input,
+        extractedOrder,
+        confidenceScores,
+      );
     }
 
     // Update message as AI-processed
@@ -151,7 +159,9 @@ export class AiEngineService {
 
     // ── Stage 6: Auto-Approval Flow (Phase 2) ─────────────────────
     if (draftOrderId && confidenceScores.routing === 'auto_approve') {
-      this.logger.log(`[${input.tenantId}] Draft ${draftOrderId} is eligible for auto-approval. Emitting event.`);
+      this.logger.log(
+        `[${input.tenantId}] Draft ${draftOrderId} is eligible for auto-approval. Emitting event.`,
+      );
       this.eventEmitter.emit('draft.auto_approve', {
         tenantId: input.tenantId,
         draftId: draftOrderId,
@@ -178,7 +188,11 @@ export class AiEngineService {
 
   private async createDraftOrder(
     input: ProcessMessageInput,
-    extractedOrder: ReturnType<typeof this.entityExtractor.extract> extends Promise<infer T> ? T : never,
+    extractedOrder: ReturnType<
+      typeof this.entityExtractor.extract
+    > extends Promise<infer T>
+      ? T
+      : never,
     scores: Awaited<ReturnType<typeof this.confidenceScorer.score>>,
   ): Promise<string> {
     const draftId = uuidv4();
@@ -190,7 +204,7 @@ export class AiEngineService {
         customerId: input.customerId,
         messageId: input.messageId,
         customerMessage: input.messageText,
-        structuredData: extractedOrder as object,
+        structuredData: extractedOrder as unknown as Prisma.InputJsonValue,
         intentConfidence: scores.intent,
         productMatchConfidence: scores.productMatch,
         completenessScore: scores.completeness,
@@ -205,14 +219,17 @@ export class AiEngineService {
             matchedProductName: item.matched_product_name,
             matchConfidence: item.match_confidence,
             quantity: item.quantity ?? 1,
-            selectedAttributes: item.selected_attributes as object,
+            selectedAttributes: item.selected_attributes,
           })),
         },
       },
     });
 
     this.logger.log(`[${input.tenantId}] Draft order created: ${draftId}`);
-    this.eventEmitter.emit('draft.created', { tenantId: input.tenantId, draftId });
+    this.eventEmitter.emit('draft.created', {
+      tenantId: input.tenantId,
+      draftId,
+    });
     return draftId;
   }
 
@@ -244,7 +261,7 @@ export class AiEngineService {
         customerId,
         messageId,
         customerMessage: messageText,
-        structuredData: extractedOrder as object,
+        structuredData: extractedOrder,
         intentConfidence: 1.0,
         productMatchConfidence: 1.0,
         completenessScore: 1.0,
@@ -265,7 +282,9 @@ export class AiEngineService {
       },
     });
 
-    this.logger.log(`[${tenantId}] Confirmed context draft order created: ${draftId}`);
+    this.logger.log(
+      `[${tenantId}] Confirmed context draft order created: ${draftId}`,
+    );
     this.eventEmitter.emit('draft.created', { tenantId, draftId });
 
     // Log draft order creation stage
@@ -274,8 +293,11 @@ export class AiEngineService {
         tenantId: tenantId,
         messageId: messageId,
         stage: AIProcessingStage.DRAFT_ORDER_GENERATION,
-        inputData: { extractedOrder: extractedOrder as object },
-        outputData: { draftOrderId: draftId, itemCount: extractedOrder.items.length },
+        inputData: { extractedOrder: extractedOrder },
+        outputData: {
+          draftOrderId: draftId,
+          itemCount: extractedOrder.items.length,
+        },
         modelUsed: 'system',
         promptVersion: '1.0.0',
         processingTimeMs: 0,
@@ -287,10 +309,10 @@ export class AiEngineService {
     return draftId;
   }
 
-  private async generateFollowUpQuestion(
+  private generateFollowUpQuestion(
     missingFields: string[],
     productName: string,
-  ): Promise<string> {
+  ): string {
     // Simple template-based questions (no LLM needed — saves tokens)
     const fieldQuestions: Record<string, string> = {
       quantity: `How many would you like?`,

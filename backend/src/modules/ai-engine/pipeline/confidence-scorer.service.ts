@@ -3,7 +3,10 @@ import { PrismaService } from '../../../common/database/prisma.service';
 import { AIProcessingStage } from '@prisma/client';
 import { ExtractedOrder } from './entity-extractor.service';
 
-export type ConfidenceRouting = 'auto_approve' | 'human_review' | 'gather_more_info';
+export type ConfidenceRouting =
+  | 'auto_approve'
+  | 'human_review'
+  | 'gather_more_info';
 
 export interface ConfidenceScores {
   intent: number;
@@ -68,10 +71,10 @@ export class ConfidenceScorerService {
     // 5. composite (weighted: intent*0.25 + match*0.40 + completeness*0.25 + history*0.10)
     let composite =
       intent * 0.25 +
-      productMatch * 0.40 +
+      productMatch * 0.4 +
       completeness * 0.25 +
       historicalCustomer;
-    
+
     // Cap composite confidence at 1.0
     composite = Math.min(1.0, composite);
 

@@ -127,7 +127,11 @@ describe('ProductsService', () => {
 
   describe('updateProduct', () => {
     it('should update a product and regenerate embedding', async () => {
-      const mockProduct = { id: 'prod-1', tenantId: 'tenant-1', name: 'Old Name' };
+      const mockProduct = {
+        id: 'prod-1',
+        tenantId: 'tenant-1',
+        name: 'Old Name',
+      };
       const updatedProduct = { ...mockProduct, name: 'New Name' };
 
       mockPrisma.product.findFirst.mockResolvedValue(mockProduct);
@@ -138,10 +142,9 @@ describe('ProductsService', () => {
       });
 
       expect(result.name).toBe('New Name');
-      expect(mockProductRetriever.generateAndStoreEmbedding).toHaveBeenCalledWith(
-        'prod-1',
-        'tenant-1',
-      );
+      expect(
+        mockProductRetriever.generateAndStoreEmbedding,
+      ).toHaveBeenCalledWith('prod-1', 'tenant-1');
     });
   });
 
@@ -153,8 +156,13 @@ describe('ProductsService', () => {
 
       const result = await service.deleteProduct('tenant-1', 'prod-1');
 
-      expect(result).toEqual({ success: true, message: 'Product deleted successfully' });
-      expect(mockPrisma.softDelete).toHaveBeenCalledWith('product', { id: 'prod-1' });
+      expect(result).toEqual({
+        success: true,
+        message: 'Product deleted successfully',
+      });
+      expect(mockPrisma.softDelete).toHaveBeenCalledWith('product', {
+        id: 'prod-1',
+      });
     });
 
     it('should throw NotFoundException when deleting non-existent product', async () => {

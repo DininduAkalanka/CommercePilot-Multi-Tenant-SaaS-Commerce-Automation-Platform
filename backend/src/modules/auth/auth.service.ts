@@ -65,7 +65,9 @@ export class AuthService {
 
     // Generate URL-safe slug from business name
     const slug = this.generateSlug(dto.businessName);
-    const existingTenant = await this.prisma.tenant.findUnique({ where: { slug } });
+    const existingTenant = await this.prisma.tenant.findUnique({
+      where: { slug },
+    });
     const finalSlug = existingTenant ? `${slug}-${Date.now()}` : slug;
 
     // Hash password
@@ -115,7 +117,12 @@ export class AuthService {
       },
     });
 
-    const accessToken = this.issueAccessToken(user.id, tenant.id, user.email, user.role);
+    const accessToken = this.issueAccessToken(
+      user.id,
+      tenant.id,
+      user.email,
+      user.role,
+    );
     const refreshToken = await this.issueRefreshToken(user.id);
 
     return {

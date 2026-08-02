@@ -76,7 +76,11 @@ describe('AuditLogsService', () => {
 
       expect(findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { tenantId: 'tenant-1', entityType: 'Order', entityId: 'order-9' },
+          where: {
+            tenantId: 'tenant-1',
+            entityType: 'Order',
+            entityId: 'order-9',
+          },
           orderBy: { timestamp: 'desc' },
         }),
       );

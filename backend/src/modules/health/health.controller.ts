@@ -34,7 +34,9 @@ export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Liveness probe — the process is up (no external deps)' })
+  @ApiOperation({
+    summary: 'Liveness probe — the process is up (no external deps)',
+  })
   liveness(): LivenessStatus {
     return {
       status: 'ok',

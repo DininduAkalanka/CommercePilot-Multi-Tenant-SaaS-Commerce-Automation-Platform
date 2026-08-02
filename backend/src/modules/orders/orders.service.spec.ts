@@ -145,9 +145,16 @@ describe('OrdersService', () => {
         status: AIDraftStatus.PENDING,
       });
 
-      mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
+      mockPrisma.$transaction.mockImplementation(async (cb: any) =>
+        cb(mockPrisma),
+      );
 
-      const result = await service.rejectDraft(tenantId, draftId, userId, reason);
+      const result = await service.rejectDraft(
+        tenantId,
+        draftId,
+        userId,
+        reason,
+      );
 
       expect(result).toEqual({ success: true, message: 'Order rejected' });
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('order.rejected', {
@@ -192,7 +199,8 @@ describe('OrdersService', () => {
 
       mockPrisma.aIDraftOrder.findMany = jest.fn(); // not used directly
       // Mock for pendingApproval
-      (mockPrisma.aIDraftOrder as any).count = jest.fn()
+      (mockPrisma.aIDraftOrder as any).count = jest
+        .fn()
         .mockResolvedValueOnce(2) // pendingApproval
         .mockResolvedValueOnce(1); // rejectedToday
 
@@ -208,8 +216,18 @@ describe('OrdersService', () => {
   describe('getRecentActivity', () => {
     it('should return formatted recent activity logs', async () => {
       const mockLogs = [
-        { id: 'log-1', action: 'ORDER_APPROVED', entityId: 'order-1', timestamp: new Date() },
-        { id: 'log-2', action: 'ORDER_REJECTED', entityId: 'draft-1', timestamp: new Date() },
+        {
+          id: 'log-1',
+          action: 'ORDER_APPROVED',
+          entityId: 'order-1',
+          timestamp: new Date(),
+        },
+        {
+          id: 'log-2',
+          action: 'ORDER_REJECTED',
+          entityId: 'draft-1',
+          timestamp: new Date(),
+        },
       ];
       mockPrisma.auditLog.findMany.mockResolvedValue(mockLogs);
 
@@ -250,7 +268,9 @@ describe('OrdersService', () => {
         status: AIDraftStatus.PENDING,
         structuredData: { items: [{ matched_product_id: 'wrong-product' }] },
       });
-      mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
+      mockPrisma.$transaction.mockImplementation(async (cb: any) =>
+        cb(mockPrisma),
+      );
       mockPrisma.aIDraftOrderItem.deleteMany.mockResolvedValue({ count: 1 });
       mockPrisma.aIDraftOrderItem.create.mockResolvedValue({});
       mockPrisma.aIDraftOrder.update.mockResolvedValue({});
@@ -269,8 +289,10 @@ describe('OrdersService', () => {
         where: { draftOrderId: 'draft-1', tenantId: 'tenant-1' },
       });
       // deleteMany must run before the corrected item is created.
-      const deleteOrder = mockPrisma.aIDraftOrderItem.deleteMany.mock.invocationCallOrder[0];
-      const createOrder = mockPrisma.aIDraftOrderItem.create.mock.invocationCallOrder[0];
+      const deleteOrder =
+        mockPrisma.aIDraftOrderItem.deleteMany.mock.invocationCallOrder[0];
+      const createOrder =
+        mockPrisma.aIDraftOrderItem.create.mock.invocationCallOrder[0];
       expect(deleteOrder).toBeLessThan(createOrder);
     });
   });
@@ -278,18 +300,22 @@ describe('OrdersService', () => {
   describe('getAnalytics', () => {
     it('should return analytics metrics', async () => {
       const mockOrders = [
-        { status: OrderStatus.APPROVED, totalAmount: 100, createdAt: new Date() },
+        {
+          status: OrderStatus.APPROVED,
+          totalAmount: 100,
+          createdAt: new Date(),
+        },
         { status: OrderStatus.SYNCED, totalAmount: 50, createdAt: new Date() },
       ];
       const mockDrafts = [
         { overallConfidence: 0.9, status: AIDraftStatus.APPROVED },
         { overallConfidence: 0.8, status: AIDraftStatus.REJECTED },
       ];
-      
+
       mockPrisma.order.findMany
         .mockResolvedValueOnce(mockOrders) // ordersLast30Days
         .mockResolvedValueOnce(mockOrders); // allOrders
-      
+
       mockPrisma.aIDraftOrder.findMany.mockResolvedValue(mockDrafts);
 
       const result = await service.getAnalytics('tenant-1');

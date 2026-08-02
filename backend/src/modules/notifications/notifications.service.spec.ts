@@ -62,7 +62,10 @@ describe('NotificationsService', () => {
       mockPrisma.notification.findMany.mockResolvedValue(mockNotifications);
       mockPrisma.notification.count.mockResolvedValue(2);
 
-      const result = await service.getNotifications(tenantId, { page: 1, limit: 20 });
+      const result = await service.getNotifications(tenantId, {
+        page: 1,
+        limit: 20,
+      });
 
       expect(result.items).toEqual(mockNotifications);
       expect(result.total).toBe(2);
@@ -111,7 +114,7 @@ describe('NotificationsService', () => {
       };
 
       // Will likely fail because there's no real SMTP server, testing the error path
-      const result = await service.sendEmail(options);
+      await service.sendEmail(options);
 
       // Whether it succeeds or fails, the notification record should be created
       expect(mockPrisma.notification.create).toHaveBeenCalledTimes(1);
@@ -142,15 +145,20 @@ describe('NotificationsService', () => {
         to: 'owner@test.com',
         subject: 'Action Required',
         html,
-        type: 'ORDER_PENDING_APPROVAL' as any,
+        type: 'ORDER_PENDING_APPROVAL',
       });
 
-      const storedMessage = mockPrisma.notification.create.mock.calls[0][0].data.message;
+      const storedMessage =
+        mockPrisma.notification.create.mock.calls[0][0].data.message;
       expect(storedMessage).not.toContain('<');
       expect(storedMessage).not.toContain('>');
-      expect(storedMessage).toContain('Action Required: Order Pending Approval');
+      expect(storedMessage).toContain(
+        'Action Required: Order Pending Approval',
+      );
       expect(storedMessage).toContain('ORD-1');
-      expect(storedMessage).toContain('Review Order (http://localhost:3000/dashboard/orders/1)');
+      expect(storedMessage).toContain(
+        'Review Order (http://localhost:3000/dashboard/orders/1)',
+      );
     });
   });
 });

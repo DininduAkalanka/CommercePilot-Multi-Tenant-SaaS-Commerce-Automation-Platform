@@ -73,7 +73,7 @@ import { HealthModule } from './modules/health/health.module';
 
     // ── Phase 3: Integrations Layer ──────────────────────────────────
     IntegrationsModule,
-    
+
     // ── Phase 4: Core Entities ───────────────────────────────────────
     CustomersModule,
     TenantSettingsModule,

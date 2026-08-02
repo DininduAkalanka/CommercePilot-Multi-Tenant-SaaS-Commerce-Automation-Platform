@@ -3,7 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../common/database/prisma.service';
-import { NotificationType, NotificationChannel, NotificationStatus } from '@prisma/client';
+import {
+  NotificationType,
+  NotificationChannel,
+  NotificationStatus,
+} from '@prisma/client';
 
 export interface EmailOptions {
   tenantId: string;
@@ -23,8 +27,11 @@ export class NotificationsService {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {
-    const provider = this.configService.get<string>('EMAIL_PROVIDER', 'mailhog');
-    
+    const provider = this.configService.get<string>(
+      'EMAIL_PROVIDER',
+      'mailhog',
+    );
+
     // Setup transporter based on provider
     if (provider === 'mailhog') {
       this.transporter = nodemailer.createTransport({
@@ -35,7 +42,9 @@ export class NotificationsService {
       });
     } else {
       // Setup real SMTP or Resend logic here later
-      this.logger.warn(`Email provider '${provider}' not fully implemented, falling back to MailHog config`);
+      this.logger.warn(
+        `Email provider '${provider}' not fully implemented, falling back to MailHog config`,
+      );
       this.transporter = nodemailer.createTransport({
         host: this.configService.get<string>('SMTP_HOST'),
         port: this.configService.get<number>('SMTP_PORT'),
@@ -47,14 +56,20 @@ export class NotificationsService {
       });
     }
 
-    const fromName = this.configService.get<string>('EMAIL_FROM_NAME', 'CommercePilot');
-    const fromEmail = this.configService.get<string>('EMAIL_FROM', 'noreply@commercepilot.dev');
+    const fromName = this.configService.get<string>(
+      'EMAIL_FROM_NAME',
+      'CommercePilot',
+    );
+    const fromEmail = this.configService.get<string>(
+      'EMAIL_FROM',
+      'noreply@commercepilot.dev',
+    );
     this.emailFrom = `"${fromName}" <${fromEmail}>`;
   }
 
   async sendEmail(options: EmailOptions): Promise<boolean> {
     const notificationId = uuidv4();
-    
+
     // Create pending notification record.
     // `message` stores a plain-text summary (shown in the dashboard feed) —
     // not the raw HTML email body, which would render as literal markup there.
@@ -67,7 +82,7 @@ export class NotificationsService {
         title: options.subject,
         message: this.htmlToPlainText(options.html),
         status: NotificationStatus.PENDING,
-        metadata: { to: options.to } as object,
+        metadata: { to: options.to },
       },
     });
 
@@ -80,7 +95,7 @@ export class NotificationsService {
       });
 
       this.logger.log(`Email sent to ${options.to}: ${info.messageId}`);
-      
+
       // Update notification record to SENT
       await this.prisma.notification.update({
         where: { id: notificationId },
@@ -99,14 +114,14 @@ export class NotificationsService {
           action: 'NOTIFICATION_SENT',
           entityType: 'Notification',
           entityId: notificationId,
-          afterState: { status: 'SENT', channel: 'EMAIL' } as object,
+          afterState: { status: 'SENT', channel: 'EMAIL' },
         },
       });
 
       return true;
     } catch (error: any) {
       this.logger.error(`Failed to send email to ${options.to}`, error);
-      
+
       // Update notification record to FAILED
       await this.prisma.notification.update({
         where: { id: notificationId },
@@ -126,7 +141,11 @@ export class NotificationsService {
           action: 'NOTIFICATION_FAILED',
           entityType: 'Notification',
           entityId: notificationId,
-          afterState: { status: 'FAILED', channel: 'EMAIL', reason: error.message } as object,
+          afterState: {
+            status: 'FAILED',
+            channel: 'EMAIL',
+            reason: error.message,
+          },
         },
       });
 
@@ -134,7 +153,12 @@ export class NotificationsService {
     }
   }
 
-  async sendOrderPendingApprovalEmail(tenantId: string, ownerEmail: string, orderNumber: string, dashboardUrl: string) {
+  async sendOrderPendingApprovalEmail(
+    tenantId: string,
+    ownerEmail: string,
+    orderNumber: string,
+    dashboardUrl: string,
+  ) {
     const html = `
       <h2>Action Required: Order Pending Approval</h2>
       <p>A new order (<strong>${orderNumber}</strong>) has been processed by CommercePilot AI and requires your approval.</p>
@@ -151,7 +175,13 @@ export class NotificationsService {
     });
   }
 
-  async sendStockAlertEmail(tenantId: string, ownerEmail: string, productName: string, available: number, requested: number) {
+  async sendStockAlertEmail(
+    tenantId: string,
+    ownerEmail: string,
+    productName: string,
+    available: number,
+    requested: number,
+  ) {
     const html = `
       <h2>Stock Alert: Insufficient Inventory</h2>
       <p>An order could not be approved due to insufficient stock for <strong>${productName}</strong>.</p>
@@ -171,7 +201,12 @@ export class NotificationsService {
     });
   }
 
-  async sendOrderSyncFailedEmail(tenantId: string, ownerEmail: string, orderId: string, errorMsg: string) {
+  async sendOrderSyncFailedEmail(
+    tenantId: string,
+    ownerEmail: string,
+    orderId: string,
+    errorMsg: string,
+  ) {
     const html = `
       <h2>System Alert: Order Sync Failed</h2>
       <p>Failed to sync order <strong>${orderId}</strong> to WooCommerce.</p>

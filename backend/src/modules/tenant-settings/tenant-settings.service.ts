@@ -53,24 +53,42 @@ export class TenantSettingsService {
       where: { id: tenantId },
       data: {
         ...(dto.name && { name: dto.name }),
-        ...(dto.whatsappPhoneNumberId !== undefined && { whatsappPhoneNumberId: dto.whatsappPhoneNumberId }),
+        ...(dto.whatsappPhoneNumberId !== undefined && {
+          whatsappPhoneNumberId: dto.whatsappPhoneNumberId,
+        }),
         ...(dto.whatsappAccessToken !== undefined && {
-          whatsappAccessToken: this.encryption.encryptNullable(dto.whatsappAccessToken),
+          whatsappAccessToken: this.encryption.encryptNullable(
+            dto.whatsappAccessToken,
+          ),
         }),
         ...(dto.whatsappVerifyToken !== undefined && {
-          whatsappVerifyToken: this.encryption.encryptNullable(dto.whatsappVerifyToken),
+          whatsappVerifyToken: this.encryption.encryptNullable(
+            dto.whatsappVerifyToken,
+          ),
         }),
-        ...(dto.woocommerceUrl !== undefined && { woocommerceUrl: dto.woocommerceUrl }),
+        ...(dto.woocommerceUrl !== undefined && {
+          woocommerceUrl: dto.woocommerceUrl,
+        }),
         ...(dto.woocommerceKey !== undefined && {
           woocommerceKey: this.encryption.encryptNullable(dto.woocommerceKey),
         }),
         ...(dto.woocommerceSecret !== undefined && {
-          woocommerceSecret: this.encryption.encryptNullable(dto.woocommerceSecret),
+          woocommerceSecret: this.encryption.encryptNullable(
+            dto.woocommerceSecret,
+          ),
         }),
-        ...(dto.aiConfidenceThreshold !== undefined && { aiConfidenceThreshold: dto.aiConfidenceThreshold }),
-        ...(dto.autoApproveEnabled !== undefined && { autoApproveEnabled: dto.autoApproveEnabled }),
-        ...(dto.autoApproveThreshold !== undefined && { autoApproveThreshold: dto.autoApproveThreshold }),
-        ...(dto.businessHours !== undefined && { businessHours: dto.businessHours }),
+        ...(dto.aiConfidenceThreshold !== undefined && {
+          aiConfidenceThreshold: dto.aiConfidenceThreshold,
+        }),
+        ...(dto.autoApproveEnabled !== undefined && {
+          autoApproveEnabled: dto.autoApproveEnabled,
+        }),
+        ...(dto.autoApproveThreshold !== undefined && {
+          autoApproveThreshold: dto.autoApproveThreshold,
+        }),
+        ...(dto.businessHours !== undefined && {
+          businessHours: dto.businessHours,
+        }),
       },
       select: {
         id: true,

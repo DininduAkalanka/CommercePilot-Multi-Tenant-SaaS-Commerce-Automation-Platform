@@ -1,7 +1,9 @@
 import { ConfigService } from '@nestjs/config';
 import { MetaWhatsAppAdapter } from './meta-whatsapp.adapter';
 
-function buildAdapter(overrides: Record<string, string> = {}): MetaWhatsAppAdapter {
+function buildAdapter(
+  overrides: Record<string, string> = {},
+): MetaWhatsAppAdapter {
   const values: Record<string, string> = {
     WHATSAPP_PHONE_NUMBER_ID: '123456',
     WHATSAPP_ACCESS_TOKEN: 'test-token',
@@ -28,7 +30,7 @@ describe('MetaWhatsAppAdapter', () => {
       status: 200,
       json: async () => ({ messages: [{ id: 'wamid.ABC' }] }),
     });
-    global.fetch = fetchMock as unknown as typeof fetch;
+    global.fetch = fetchMock;
 
     const adapter = buildAdapter();
     const result = await adapter.sendTextMessage('+94771234567', 'Hello');
@@ -54,7 +56,7 @@ describe('MetaWhatsAppAdapter', () => {
       ok: false,
       status: 401,
       json: async () => ({ error: { message: 'Invalid OAuth token' } }),
-    }) as unknown as typeof fetch;
+    });
 
     const adapter = buildAdapter();
     const result = await adapter.sendTextMessage('+94771234567', 'Hi');
@@ -72,7 +74,7 @@ describe('MetaWhatsAppAdapter', () => {
   });
 
   it('markAsRead never throws even if the request fails', async () => {
-    global.fetch = jest.fn().mockRejectedValue(new Error('network down')) as unknown as typeof fetch;
+    global.fetch = jest.fn().mockRejectedValue(new Error('network down'));
     const adapter = buildAdapter();
     await expect(adapter.markAsRead('wamid.XYZ')).resolves.toBeUndefined();
   });

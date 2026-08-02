@@ -35,7 +35,9 @@ export class OrderSyncService {
   @OnEvent('order.approved')
   async handleOrderApproved(payload: { tenantId: string; orderId: string }) {
     const { tenantId, orderId } = payload;
-    this.logger.log(`[${tenantId}] Starting sync for approved order ${orderId}`);
+    this.logger.log(
+      `[${tenantId}] Starting sync for approved order ${orderId}`,
+    );
 
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId, deletedAt: null },
@@ -134,11 +136,11 @@ export class OrderSyncService {
             action: 'ORDER_SYNCED',
             entityType: 'Order',
             entityId: orderId,
-            beforeState: { status: order.status } as object,
+            beforeState: { status: order.status },
             afterState: {
               status: OrderStatus.SYNCED,
               externalOrderId: result.externalOrderId,
-            } as object,
+            },
           },
         });
       });
@@ -148,7 +150,9 @@ export class OrderSyncService {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`[${tenantId}] Failed to sync order ${orderId}: ${message}`);
+      this.logger.error(
+        `[${tenantId}] Failed to sync order ${orderId}: ${message}`,
+      );
 
       await this.prisma.$transaction(async (tx) => {
         await tx.order.update({
@@ -164,7 +168,10 @@ export class OrderSyncService {
             action: 'ORDER_SYNC_FAILED',
             entityType: 'Order',
             entityId: orderId,
-            afterState: { status: OrderStatus.FAILED, error: message } as object,
+            afterState: {
+              status: OrderStatus.FAILED,
+              error: message,
+            },
           },
         });
 

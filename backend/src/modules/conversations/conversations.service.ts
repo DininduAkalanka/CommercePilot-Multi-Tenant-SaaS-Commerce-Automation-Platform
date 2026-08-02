@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../common/database/prisma.service';
-import { ConversationStateService, ConversationSession } from './conversation-state.service';
+import {
+  ConversationStateService,
+  ConversationSession,
+} from './conversation-state.service';
 import { ConversationStage, ConversationStatus } from '@prisma/client';
 
 export interface ActiveConversationResult {
@@ -47,10 +50,15 @@ export class ConversationsService {
     phone: string,
   ): Promise<ActiveConversationResult> {
     // Check Redis first (hot path — avoids DB call for ongoing conversations)
-    const existingSession = await this.conversationState.getSession(tenantId, phone);
+    const existingSession = await this.conversationState.getSession(
+      tenantId,
+      phone,
+    );
 
     if (existingSession) {
-      this.logger.log(`[${tenantId}] Resuming existing conversation for ${phone}`);
+      this.logger.log(
+        `[${tenantId}] Resuming existing conversation for ${phone}`,
+      );
       return {
         conversation: {
           id: existingSession.conversationId,
@@ -75,7 +83,9 @@ export class ConversationsService {
 
     if (existingDbConversation) {
       // Recreate Redis session from DB record (hydration after restart)
-      this.logger.log(`[${tenantId}] Hydrating conversation from DB for ${phone}`);
+      this.logger.log(
+        `[${tenantId}] Hydrating conversation from DB for ${phone}`,
+      );
       const session = await this.conversationState.createSession(
         existingDbConversation.id,
         tenantId,
@@ -101,7 +111,12 @@ export class ConversationsService {
     phone: string,
     message: string,
   ): Promise<void> {
-    await this.conversationState.appendMessage(tenantId, phone, 'customer', message);
+    await this.conversationState.appendMessage(
+      tenantId,
+      phone,
+      'customer',
+      message,
+    );
 
     // Update lastMessageAt in DB
     await this.prisma.conversation.updateMany({
@@ -143,11 +158,16 @@ export class ConversationsService {
     }
 
     // Merge extracted data into Redis partialOrderData
-    const mergedData = this.mergeExtractionData(session.partialOrderData, extractedOrder);
+    const mergedData = this.mergeExtractionData(
+      session.partialOrderData,
+      extractedOrder,
+    );
 
     // Solve next stage transition rules
     let nextStage = session.stage;
-    const hasRequiredMissing = missingFields.some((f) => ['product', 'quantity'].includes(f));
+    const hasRequiredMissing = missingFields.some((f) =>
+      ['product', 'quantity'].includes(f),
+    );
 
     if (session.stage === ConversationStage.ACTIVE) {
       if (hasRequiredMissing) {
@@ -212,14 +232,20 @@ export class ConversationsService {
       },
     });
 
-    this.logger.log(`[${tenantId}] Conversation transitioned to ${newStage} for ${phone}`);
+    this.logger.log(
+      `[${tenantId}] Conversation transitioned to ${newStage} for ${phone}`,
+    );
   }
 
   /**
    * Context accumulator: Merges newly extracted elements across turns.
    */
   private mergeExtractionData(currentData: any, extraction: any): any {
-    const data = currentData || { gathered: {}, pendingItems: [], deliveryInfo: {} };
+    const data = currentData || {
+      gathered: {},
+      pendingItems: [],
+      deliveryInfo: {},
+    };
     if (!data.gathered) data.gathered = {};
     if (!data.pendingItems) data.pendingItems = [];
     if (!data.deliveryInfo) data.deliveryInfo = {};
@@ -242,8 +268,11 @@ export class ConversationsService {
       for (const newItem of extraction.items) {
         const matchIndex = data.pendingItems.findIndex(
           (i: any) =>
-            (i.matched_product_id && i.matched_product_id === newItem.matched_product_id) ||
-            (i.product_query && i.product_query.toLowerCase() === newItem.product_query.toLowerCase())
+            (i.matched_product_id &&
+              i.matched_product_id === newItem.matched_product_id) ||
+            (i.product_query &&
+              i.product_query.toLowerCase() ===
+                newItem.product_query.toLowerCase()),
         );
 
         if (matchIndex > -1) {
@@ -353,7 +382,9 @@ export class ConversationsService {
       phone,
     );
 
-    this.logger.log(`[${tenantId}] New conversation started: ${conversationId} for ${phone}`);
+    this.logger.log(
+      `[${tenantId}] New conversation started: ${conversationId} for ${phone}`,
+    );
 
     return { conversation, session, isNew: true };
   }

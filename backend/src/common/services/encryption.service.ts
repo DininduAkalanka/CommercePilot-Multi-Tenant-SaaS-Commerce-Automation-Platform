@@ -77,7 +77,9 @@ export class EncryptionService {
 
   /** True if the value is already in the versioned encrypted format. */
   isEncrypted(value: string): boolean {
-    return value.startsWith(`${this.version}:`) && value.split(':').length === 4;
+    return (
+      value.startsWith(`${this.version}:`) && value.split(':').length === 4
+    );
   }
 
   /**

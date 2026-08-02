@@ -44,12 +44,18 @@ export class NotificationListener {
         dashboardUrl,
       );
     } catch (err: any) {
-      this.logger.error(`Failed to send draft.created notification: ${err.message}`);
+      this.logger.error(
+        `Failed to send draft.created notification: ${err.message}`,
+      );
     }
   }
 
   @OnEvent('order.sync_failed')
-  async handleOrderSyncFailed(payload: { tenantId: string; orderId: string; error: string }) {
+  async handleOrderSyncFailed(payload: {
+    tenantId: string;
+    orderId: string;
+    error: string;
+  }) {
     const { tenantId, orderId, error } = payload;
     try {
       const owner = await this.prisma.user.findFirst({
@@ -67,7 +73,9 @@ export class NotificationListener {
         error,
       );
     } catch (err: any) {
-      this.logger.error(`Failed to send order.sync_failed notification: ${err.message}`);
+      this.logger.error(
+        `Failed to send order.sync_failed notification: ${err.message}`,
+      );
     }
   }
 }
