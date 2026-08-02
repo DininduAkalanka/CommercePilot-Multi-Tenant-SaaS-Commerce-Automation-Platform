@@ -175,6 +175,51 @@ export class NotificationsService {
     });
   }
 
+  /**
+   * A conversation the AI could not resolve has been handed to a human.
+   *
+   * The customer has already been told someone will reply, so this is the most
+   * time-sensitive notification the system sends — it includes the customer's
+   * own words so the owner can answer without opening anything first.
+   */
+  async sendHandoffRequestedEmail(
+    tenantId: string,
+    ownerEmail: string,
+    details: {
+      phone: string;
+      reason: string;
+      customerMessage?: string;
+      missingFields?: string[];
+      conversationUrl: string;
+    },
+  ) {
+    const missing = details.missingFields?.length
+      ? `<p><strong>AI could not determine:</strong> ${details.missingFields.join(', ')}</p>`
+      : '';
+
+    const said = details.customerMessage
+      ? `<blockquote style="margin:12px 0;padding:10px 14px;border-left:3px solid #00d084;background:#f6f6f6;">${details.customerMessage}</blockquote>`
+      : '';
+
+    const html = `
+      <h2>A customer needs you</h2>
+      <p>CommercePilot could not understand an order from <strong>${details.phone}</strong> and has told the customer a person will reply.</p>
+      ${said}
+      ${missing}
+      <p style="color:#666;font-size:13px;">Reason: ${details.reason}</p>
+      <p>Please reply to them on WhatsApp.</p>
+      <a href="${details.conversationUrl}" style="display: inline-block; padding: 10px 20px; background-color: #00d084; color: #fff; text-decoration: none; border-radius: 5px;">Open conversations</a>
+    `;
+
+    return this.sendEmail({
+      tenantId,
+      to: ownerEmail,
+      subject: `Customer needs a human: ${details.phone}`,
+      html,
+      type: NotificationType.SYSTEM_ALERT,
+    });
+  }
+
   async sendStockAlertEmail(
     tenantId: string,
     ownerEmail: string,

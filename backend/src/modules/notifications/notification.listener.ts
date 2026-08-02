@@ -50,6 +50,47 @@ export class NotificationListener {
     }
   }
 
+  /**
+   * A conversation the AI could not resolve has been escalated.
+   *
+   * This is time-critical in a way the other notifications are not: a customer
+   * has just been told a human will reply, and they are waiting in the chat.
+   * The email exists so the owner finds out without watching the dashboard.
+   */
+  @OnEvent('conversation.handoff_requested')
+  async handleHandoffRequested(payload: {
+    tenantId: string;
+    phone: string;
+    reason: string;
+    customerMessage?: string;
+    missingFields?: string[];
+  }) {
+    const { tenantId, phone, reason, customerMessage, missingFields } = payload;
+
+    try {
+      const owner = await this.prisma.user.findFirst({
+        where: { tenantId, role: 'OWNER' },
+      });
+      if (!owner) return;
+
+      await this.notificationsService.sendHandoffRequestedEmail(
+        tenantId,
+        owner.email,
+        {
+          phone,
+          reason,
+          customerMessage,
+          missingFields,
+          conversationUrl: `${process.env.FRONTEND_URL}/dashboard/simulator`,
+        },
+      );
+    } catch (err: any) {
+      this.logger.error(
+        `Failed to send conversation.handoff_requested notification: ${err.message}`,
+      );
+    }
+  }
+
   @OnEvent('order.sync_failed')
   async handleOrderSyncFailed(payload: {
     tenantId: string;

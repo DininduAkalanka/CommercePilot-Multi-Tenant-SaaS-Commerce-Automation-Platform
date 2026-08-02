@@ -5,6 +5,7 @@ import { ConversationStateService } from './conversation-state.service';
 import { IoRedisAdapter } from './adapters/ioredis.adapter';
 import { REDIS_SERVICE } from './interfaces/redis-service.interface';
 import { ConversationsProcessor } from './conversations.processor';
+import { HumanHandoffService } from './human-handoff.service';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 
 @Module({
@@ -22,7 +23,13 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
     ConversationStateService,
     ConversationsService,
     ConversationsProcessor,
+    HumanHandoffService,
   ],
-  exports: [ConversationsService, ConversationStateService, BullModule],
+  exports: [
+    ConversationsService,
+    ConversationStateService,
+    HumanHandoffService,
+    BullModule,
+  ],
 })
 export class ConversationsModule {}
