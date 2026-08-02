@@ -65,6 +65,7 @@ model Tenant {
   notifications         Notification[]
   auditLogs             AuditLog[]
   conversations         Conversation[]
+  unfulfilledDemand     UnfulfilledDemand[]
 
   @@map("tenants")
 }
@@ -516,6 +517,38 @@ model Notification {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// UNFULFILLED DEMAND — What customers asked for and could not get
+//
+// When the AI cannot match a request, that is not merely a failed extraction:
+// it is a customer stating, in their own words, that they wanted to buy
+// something the business could not sell them. Aggregated, it answers
+// "what are people asking me for that I do not stock?"
+// ─────────────────────────────────────────────────────────────────
+model UnfulfilledDemand {
+  id         String  @id @default(uuid()) @db.Uuid
+  tenantId   String  @db.Uuid
+  customerId String? @db.Uuid
+  messageId  String? @db.Uuid
+
+  /// The customer's own words, kept for the owner to read.
+  query String
+
+  /// Lowercased and whitespace-collapsed, so "Red Saree" and "red  saree"
+  /// aggregate into a single row in the report rather than two.
+  normalizedQuery String
+
+  reason UnfulfilledReason
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, normalizedQuery])
+  @@map("unfulfilled_demand")
+}
+
+// ─────────────────────────────────────────────────────────────────
 // AUDIT LOG — Immutable append-only action log
 // NEVER update or delete records in this table
 // ─────────────────────────────────────────────────────────────────
@@ -670,6 +703,17 @@ enum NotificationStatus {
   SENT
   DELIVERED
   FAILED
+}
+
+/// Why the catalog could not satisfy what a customer asked for.
+enum UnfulfilledReason {
+  /// Products exist, but none matched what was asked for.
+  NO_CATALOG_MATCH
+  /// The tenant has no products at all — an onboarding problem, not a
+  /// stocking one, and worth distinguishing in the report.
+  EMPTY_CATALOG
+  /// Matched a real product that had no stock.
+  OUT_OF_STOCK
 }
 
 enum WhatsAppProvider {

@@ -6,7 +6,13 @@ import { IntentDetectorService } from './pipeline/intent-detector.service';
 import { ProductRetrieverService } from './pipeline/product-retriever.service';
 import { EntityExtractorService } from './pipeline/entity-extractor.service';
 import { ConfidenceScorerService } from './pipeline/confidence-scorer.service';
-import { AIDraftStatus, AIProcessingStage, Prisma } from '@prisma/client';
+import {
+  AIDraftStatus,
+  AIProcessingStage,
+  Prisma,
+  UnfulfilledReason,
+} from '@prisma/client';
+import { UnfulfilledDemandService } from './unfulfilled-demand.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 export interface ProcessMessageInput {
@@ -66,6 +72,7 @@ export class AiEngineService {
     private readonly productRetriever: ProductRetrieverService,
     private readonly entityExtractor: EntityExtractorService,
     private readonly confidenceScorer: ConfidenceScorerService,
+    private readonly unfulfilledDemand: UnfulfilledDemandService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -127,6 +134,10 @@ export class AiEngineService {
       catalogContext,
       input.conversationHistory ?? [],
     );
+
+    // Anything the catalog could not satisfy is demand, not just a failed
+    // extraction — record it before the information is lost with the failure.
+    await this.recordUnfulfilledDemand(input, extractedOrder, products.length);
 
     // ── Stage 4: Confidence Scoring ──────────────────────────────
     const confidenceScores = await this.confidenceScorer.score(
@@ -195,6 +206,57 @@ export class AiEngineService {
   }
 
   // ── Private helpers ────────────────────────────────────────────
+
+  /**
+   * Log every line the extractor could not resolve to a real product.
+   *
+   * `matched_product_id === null` means the AI read the request but found
+   * nothing in the catalog to satisfy it — the customer wanted to buy
+   * something the business does not sell. That is the signal worth keeping.
+   *
+   * An empty catalog is recorded separately: it is an onboarding problem
+   * ("you have not synced your products"), not a stocking one ("customers
+   * want something you do not carry"), and conflating them would make the
+   * report useless for a tenant who has just signed up.
+   */
+  private async recordUnfulfilledDemand(
+    input: ProcessMessageInput,
+    extractedOrder: {
+      items: { matched_product_id: string | null; product_query: string }[];
+    },
+    retrievedCount: number,
+  ): Promise<void> {
+    const unmatched = extractedOrder.items.filter(
+      (item) => !item.matched_product_id && item.product_query,
+    );
+
+    if (unmatched.length === 0) return;
+
+    // "Retrieval returned nothing for THIS query" is not the same as "this
+    // tenant has no products" — a full catalogue simply may not contain
+    // shoes. Only when retrieval comes back empty is the distinction in
+    // doubt, so the extra lookup is paid for just in that case.
+    let reason: UnfulfilledReason = UnfulfilledReason.NO_CATALOG_MATCH;
+
+    if (retrievedCount === 0) {
+      const anyProduct = await this.prisma.product.findFirst({
+        where: { tenantId: input.tenantId, isActive: true, deletedAt: null },
+        select: { id: true },
+      });
+
+      if (!anyProduct) reason = UnfulfilledReason.EMPTY_CATALOG;
+    }
+
+    for (const item of unmatched) {
+      await this.unfulfilledDemand.record({
+        tenantId: input.tenantId,
+        customerId: input.customerId,
+        messageId: input.messageId,
+        query: item.product_query,
+        reason,
+      });
+    }
+  }
 
   private async createDraftOrder(
     input: ProcessMessageInput,

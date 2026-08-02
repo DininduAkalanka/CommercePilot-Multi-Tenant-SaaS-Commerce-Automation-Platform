@@ -259,6 +259,10 @@ export const notificationsApi = {
 export const aiEngineApi = {
   /** GET /api/v1/ai-engine/metrics — pipeline health, confidence, correction rate */
   getMetrics: (days = 7) => api.get('/ai-engine/metrics', { params: { days } }),
+
+  /** GET /api/v1/ai-engine/unfulfilled-demand — what customers asked for and couldn't get */
+  getUnfulfilledDemand: (days = 30, limit = 20) =>
+    api.get('/ai-engine/unfulfilled-demand', { params: { days, limit } }),
 };
 
 export default api;

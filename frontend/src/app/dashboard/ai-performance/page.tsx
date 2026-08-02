@@ -92,8 +92,23 @@ function StatCard({
   );
 }
 
+interface DemandRow {
+  query: string;
+  requests: number;
+  customers: number;
+  reason: string;
+  lastAskedAt: string;
+}
+
+interface DemandSummary {
+  totalRequests: number;
+  distinctQueries: number;
+  top: DemandRow[];
+}
+
 export default function AiPerformancePage() {
   const [data, setData] = useState<AiMetrics | null>(null);
+  const [demand, setDemand] = useState<DemandSummary | null>(null);
   const [days, setDays] = useState(7);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,8 +117,12 @@ export default function AiPerformancePage() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await aiEngineApi.getMetrics(days);
-      setData(res.data.data);
+      const [metricsRes, demandRes] = await Promise.all([
+        aiEngineApi.getMetrics(days),
+        aiEngineApi.getUnfulfilledDemand(days),
+      ]);
+      setData(metricsRes.data.data);
+      setDemand(demandRes.data.data);
     } catch (err) {
       console.error(err);
       setError('Failed to load AI metrics');
@@ -282,6 +301,52 @@ export default function AiPerformancePage() {
                   <td>{pct(s.successRate)}</td>
                   <td>{s.avgMs} ms</td>
                   <td>{s.p95Ms} ms</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Unfulfilled demand — a stocking signal, not an error list */}
+      <div className="card table-scroll" style={{ overflow: 'hidden' }}>
+        <div style={{ padding: '18px 22px 0' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>
+            Customers asked for products you don&apos;t have
+          </h3>
+          <div className="t-muted" style={{ fontSize: '0.8rem' }}>
+            {demand && demand.totalRequests > 0
+              ? `${demand.totalRequests} requests across ${demand.distinctQueries} products the catalogue could not match. Ranked by number of distinct customers — five people asking once each is a stronger signal than one person asking five times.`
+              : 'Every request the AI cannot match is recorded here.'}
+          </div>
+        </div>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>They asked for</th><th>Customers</th><th>Requests</th><th>Why</th><th>Last asked</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!demand || demand.top.length === 0 ? (
+              <tr><td colSpan={5} className="t-muted" style={{ textAlign: 'center', padding: 30 }}>
+                Nothing unmatched in this period — every request found a product.
+              </td></tr>
+            ) : (
+              demand.top.map((d) => (
+                <tr key={`${d.query}-${d.reason}`}>
+                  <td style={{ fontWeight: 500 }}>{d.query}</td>
+                  <td>{d.customers}</td>
+                  <td>{d.requests}</td>
+                  <td className="t-muted" style={{ fontSize: '0.8rem' }}>
+                    {d.reason === 'EMPTY_CATALOG'
+                      ? 'No products synced'
+                      : d.reason === 'OUT_OF_STOCK'
+                        ? 'Out of stock'
+                        : 'Not in catalogue'}
+                  </td>
+                  <td className="t-muted" style={{ fontSize: '0.8rem' }}>
+                    {new Date(d.lastAskedAt).toLocaleDateString()}
+                  </td>
                 </tr>
               ))
             )}
