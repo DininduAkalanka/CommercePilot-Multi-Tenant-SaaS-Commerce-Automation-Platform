@@ -86,6 +86,63 @@ describe('ProductRetrieverService', () => {
     });
   });
 
+  describe('raw SQL identifiers', () => {
+    /**
+     * Regression: the raw vector query used snake_case (`tenant_id`,
+     * `is_active`, `deleted_at`, `stock_quantity`) but the Prisma schema maps
+     * only the TABLE name — columns keep their model field names, so Postgres
+     * created them as "tenantId", "isActive", "deletedAt", "stockQuantity".
+     *
+     * Every call therefore threw `column "tenant_id" does not exist`,
+     * retrieve() caught it, and vector search silently degraded to text search
+     * on 100% of messages. Nothing surfaced but a warning log.
+     *
+     * Unit tests mock Prisma and so cannot execute SQL; asserting on the query
+     * text is the cheapest guard that would have caught this.
+     */
+    const sqlFrom = (mockCall: unknown[]): string =>
+      (mockCall[0] as string[]).join('?');
+
+    it('queries vector search with quoted camelCase columns', async () => {
+      mockGemini.generateEmbedding.mockResolvedValue(new Array(768).fill(0.1));
+      mockPrisma.$queryRaw.mockResolvedValue([]);
+      mockPrisma.product.findMany.mockResolvedValue([]);
+
+      await service.retrieve('tenant-1', 'msg-1', 'wireless mouse');
+
+      const sql = sqlFrom(mockPrisma.$queryRaw.mock.calls[0]);
+
+      expect(sql).toContain('"tenantId"');
+      expect(sql).toContain('"isActive"');
+      expect(sql).toContain('"deletedAt"');
+      expect(sql).toContain('"stockQuantity"');
+
+      expect(sql).not.toContain('tenant_id');
+      expect(sql).not.toContain('is_active');
+      expect(sql).not.toContain('deleted_at');
+      expect(sql).not.toContain('stock_quantity');
+    });
+
+    it('updates the embedding with a quoted camelCase tenant filter', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({
+        id: 'p1',
+        name: 'Wireless Mouse',
+        description: null,
+        sku: 'WM-1',
+        attributes: {},
+      });
+      mockGemini.generateEmbedding.mockResolvedValue(new Array(768).fill(0.1));
+      mockPrisma.$executeRaw.mockResolvedValue(1);
+
+      await service.generateAndStoreEmbedding('p1', 'tenant-1');
+
+      const sql = sqlFrom(mockPrisma.$executeRaw.mock.calls[0]);
+
+      expect(sql).toContain('"tenantId"');
+      expect(sql).not.toContain('tenant_id');
+    });
+  });
+
   describe('text search fallback', () => {
     // Regression: the entire message was passed to `contains`, so
     // "I want to buy a mouse" was matched literally against product names and

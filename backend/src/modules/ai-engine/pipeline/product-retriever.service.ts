@@ -135,11 +135,13 @@ export class ProductRetrieverService {
         return;
       }
 
-      // Store embedding using raw SQL (Prisma doesn't support vector type natively)
+      // Store embedding using raw SQL (Prisma doesn't support vector type
+      // natively). Note the quoted "tenantId" — see vectorSearch for why
+      // snake_case here silently broke every write.
       await this.prisma.$executeRaw`
         UPDATE products
         SET embedding = ${JSON.stringify(embedding)}::vector
-        WHERE id = ${productId}::uuid AND tenant_id = ${tenantId}::uuid
+        WHERE id = ${productId}::uuid AND "tenantId" = ${tenantId}::uuid
       `;
 
       this.logger.log(
@@ -173,6 +175,13 @@ export class ProductRetrieverService {
     // "least dissimilar" rows no matter how irrelevant, and those rows were
     // then handed to the extractor as authoritative catalog grounding —
     // encouraging exactly the hallucinated product matches RAG exists to stop.
+    // Identifiers are quoted camelCase, NOT snake_case. The Prisma schema maps
+    // only the TABLE name (`@@map("products")`) — the columns keep their model
+    // field names, so Postgres created them as "tenantId", "isActive" and
+    // "deletedAt". This query previously used snake_case, so it threw
+    // `column "tenant_id" does not exist` on EVERY call. retrieve() catches
+    // that and falls back to text search, so vector search silently never ran
+    // and nothing surfaced except a warning log.
     const results = await this.prisma.$queryRaw<RetrievedProduct[]>`
       SELECT
         id,
@@ -180,14 +189,14 @@ export class ProductRetrieverService {
         description,
         sku,
         price::float,
-        stock_quantity as "stockQuantity",
+        "stockQuantity",
         attributes,
         1 - (embedding <=> ${vector}::vector) AS similarity
       FROM products
       WHERE
-        tenant_id = ${tenantId}::uuid
-        AND is_active = true
-        AND deleted_at IS NULL
+        "tenantId" = ${tenantId}::uuid
+        AND "isActive" = true
+        AND "deletedAt" IS NULL
         AND embedding IS NOT NULL
         AND 1 - (embedding <=> ${vector}::vector) >= ${this.MIN_SIMILARITY}
       ORDER BY embedding <=> ${vector}::vector

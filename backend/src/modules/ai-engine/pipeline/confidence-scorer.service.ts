@@ -29,7 +29,37 @@ export interface ConfidenceScores {
 export class ConfidenceScorerService {
   private readonly logger = new Logger(ConfidenceScorerService.name);
 
+  /**
+   * Routing bands from BUSINESS_RULES.md §10 — the business-logic constitution,
+   * which states it takes precedence over any conflicting implementation.
+   *
+   *   >= 0.95        automatic draft creation
+   *   0.80 – 0.94    owner review recommended
+   *   <  0.80        manual confirmation required before order creation
+   *
+   * Expressed as named constants rather than inline magic numbers so a change
+   * here is visibly a change to a business rule, not a tweak to a heuristic.
+   */
+  static readonly AUTO_APPROVE_FLOOR = 0.95;
+  static readonly HUMAN_REVIEW_FLOOR = 0.8;
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * A tenant may make auto-approval *stricter* than §10, never looser.
+   *
+   * `Tenant.autoApproveThreshold` defaults to 0.95, but nothing prevented it
+   * being set to, say, 0.5 — which would have auto-approved orders the
+   * business rules require a human to confirm. Clamping here means the
+   * setting can only tighten the policy.
+   */
+  private effectiveAutoApproveThreshold(tenantThreshold: number): number {
+    const threshold = Number.isFinite(tenantThreshold)
+      ? tenantThreshold
+      : ConfidenceScorerService.AUTO_APPROVE_FLOOR;
+
+    return Math.max(threshold, ConfidenceScorerService.AUTO_APPROVE_FLOOR);
+  }
 
   async score(
     tenantId: string,
@@ -78,13 +108,25 @@ export class ConfidenceScorerService {
     // Cap composite confidence at 1.0
     composite = Math.min(1.0, composite);
 
-    // 6. routing routing values: auto_approve | human_review | gather_more_info
-    let routing: ConfidenceRouting = 'gather_more_info';
-    if (extractedOrder.missing_fields.length > 0 || composite < 0.6) {
+    // 6. Routing, per BUSINESS_RULES.md §10.
+    //
+    // The previous cutoff was a bare 0.6, which sent every order scoring
+    // 0.60–0.79 to ordinary owner review even though §10 requires manual
+    // confirmation below 0.80. Anything under the review floor now goes back
+    // to the customer for clarification, so no draft is raised on a guess.
+    let routing: ConfidenceRouting;
+
+    if (
+      extractedOrder.missing_fields.length > 0 ||
+      composite < ConfidenceScorerService.HUMAN_REVIEW_FLOOR
+    ) {
       routing = 'gather_more_info';
-    } else if (autoApproveEnabled && composite >= autoApproveThreshold) {
+    } else if (
+      autoApproveEnabled &&
+      composite >= this.effectiveAutoApproveThreshold(autoApproveThreshold)
+    ) {
       routing = 'auto_approve';
-    } else if (composite >= 0.6) {
+    } else {
       routing = 'human_review';
     }
 
