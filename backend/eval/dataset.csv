@@ -1,0 +1,25 @@
+id,message,language,expected_intent,expected_product,expected_quantity,expected_size,expected_color,expected_address,expected_missing,notes
+en-01,I need 2 white school shirts size L,en,ORDER,White School Shirt,2,L,,,,clean baseline — everything stated
+en-02,Do you have blue cotton shirt in XL?,en,INQUIRY,Blue Cotton Shirt,,XL,blue,,quantity,stock question not an order
+en-03,Please send 3 school trousers size 32 to Nugegoda,en,ORDER,School Trousers,3,32,,Nugegoda,,address stated inline
+en-04,Hi good morning,en,GREETING,,,,,,,no order intent at all
+en-05,I want to buy a saree,en,ORDER,Cotton Saree,1,,,,color,"'a' implies qty 1; colour not given"
+en-06,2 frocks red and 1 blue shirt,en,ORDER,Ladies Cotton Frock,2,,red,,size,TWO products in one message — hard case
+si-01,මට සුදු කමිස 2ක් ඕන,si,ORDER,White School Shirt,2,,white,,size,"'කමිස' = shirts, '2ක්' = two"
+si-02,කලිසම් තියෙනවද?,si,INQUIRY,School Trousers,,,,,quantity,"'කලිසම්' = trousers; availability question"
+si-03,මට ෆ්‍රොක් එකක් ඕන size M,si,ORDER,Ladies Cotton Frock,1,M,,,color,"'එකක්' = one"
+sg-01,mata white shirt 2k denna,singlish,ORDER,White School Shirt,2,,white,,size,"'2k' = 2ක් = two; 'denna' = give"
+sg-02,school trouser tiyenawada size 32,singlish,INQUIRY,School Trousers,,32,,,quantity,"'tiyenawada' = do you have"
+sg-03,blue shirt ekak one L size,singlish,ORDER,Blue Cotton Shirt,1,L,blue,,,"'ekak' = one; 'one' here is ඕන = need, NOT the number 1"
+sg-04,saree ekak gannawa maroon color,singlish,ORDER,Cotton Saree,1,,maroon,,,"'gannawa' = will buy; item is out of stock"
+sg-05,mata 3k one frock,singlish,ORDER,Ladies Cotton Frock,3,,,,size,word order differs from English
+sg-06,ela machan school shirt 2k Nugegoda deliver karanna,singlish,ORDER,White School Shirt,2,,,Nugegoda,size,slang opener + delivery instruction
+sg-07,mokakda tiyenne?,singlish,INQUIRY,,,,,,product,"'what do you have' — no product named"
+sg-08,ganan kiyada blue shirt,singlish,INQUIRY,Blue Cotton Shirt,,,blue,,quantity,"'ganan kiyada' = how much is it (price question)"
+mx-01,mata 2 white shirt one size L,mixed,ORDER,White School Shirt,2,L,white,,,English nouns with Sinhala grammar
+mx-02,blue shirt තියෙනවද size XL,mixed,INQUIRY,Blue Cotton Shirt,,XL,blue,,quantity,Sinhala script mixed with English product name
+mx-03,frock 1k one red, Colombo 07 ta deliver karanna,mixed,ORDER,Ladies Cotton Frock,1,,red,Colombo 07,size,"comma inside the message — CSV quoting matters"
+hd-01,same as last time,en,ORDER,,,,,,product,references prior context the extractor cannot see
+hd-02,ela,singlish,GREETING,,,,,,,single slang word — should NOT become an order
+hd-03,mata one,singlish,ORDER,,,,,,product,"'one' = ඕන = need; no product, no quantity"
+hd-04,2k,singlish,ORDER,,2,,,,product,bare quantity with no product
