@@ -7,6 +7,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../common/database/prisma.service';
 import { AiEngineService } from '../ai-engine/ai-engine.service';
 import { ConversationsService } from '../conversations/conversations.service';
+import { HumanHandoffService } from '../conversations/human-handoff.service';
 import type { IWhatsAppAdapter } from './interfaces/whatsapp-adapter.interface';
 import { WHATSAPP_ADAPTER } from './interfaces/whatsapp-adapter.interface';
 import { MockWhatsAppAdapter } from './adapters/mock-whatsapp.adapter';
@@ -39,6 +40,7 @@ export class WhatsAppService {
     private readonly prisma: PrismaService,
     private readonly aiEngine: AiEngineService,
     private readonly conversationsService: ConversationsService,
+    private readonly humanHandoff: HumanHandoffService,
     private readonly configService: ConfigService,
     @Inject(WHATSAPP_ADAPTER)
     private readonly whatsappAdapter: IWhatsAppAdapter,
@@ -312,12 +314,48 @@ export class WhatsAppService {
       nextStage === ConversationStage.GATHERING_INFO &&
       result.missingFields.length > 0
     ) {
+      // The AI could not fully understand the order. Before asking again,
+      // check whether it has already asked as many times as it is allowed to —
+      // without this the conversation loops until the customer gives up, which
+      // is a silently lost sale.
+      const escalate = await this.humanHandoff.shouldEscalate(tenantId, phone);
+
+      if (escalate) {
+        const handoffMsg = this.humanHandoff.buildCustomerMessage();
+
+        // escalate() is idempotent, so a customer who keeps typing after the
+        // handoff gets no further automated replies and the owner is notified
+        // exactly once.
+        const firstTime = await this.humanHandoff.escalate(
+          tenantId,
+          phone,
+          'AI could not resolve the order after repeated clarifications',
+          { customerMessage: text, missingFields: result.missingFields },
+        );
+
+        if (firstTime) {
+          await this.whatsappAdapter.sendTextMessage(phone, handoffMsg);
+          await this.conversationsService.addBotReply(
+            tenantId,
+            phone,
+            handoffMsg,
+          );
+        }
+
+        this.logger.warn(
+          `[${tenantId}] Handed ${phone} to a human instead of asking again`,
+        );
+
+        return;
+      }
+
       // Missing fields — format missing info template
       const missingInfoList = result.missingFields.join(', ');
       const missingMsg = `To complete your order, could you please confirm: ${missingInfoList}?`;
 
       await this.whatsappAdapter.sendTextMessage(phone, missingMsg);
       await this.conversationsService.addBotReply(tenantId, phone, missingMsg);
+      await this.humanHandoff.registerClarification(tenantId, phone);
 
       // Schedule check-abandoned job in BullMQ (30s in dev for easy verification, 24h in prod)
       const delayMs =

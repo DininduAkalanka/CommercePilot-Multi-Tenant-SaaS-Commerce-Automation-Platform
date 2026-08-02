@@ -3,6 +3,7 @@ import { WhatsAppService } from './whatsapp.service';
 import { PrismaService } from '../../common/database/prisma.service';
 import { AiEngineService } from '../ai-engine/ai-engine.service';
 import { ConversationsService } from '../conversations/conversations.service';
+import { HumanHandoffService } from '../conversations/human-handoff.service';
 import { ConfigService } from '@nestjs/config';
 import { WHATSAPP_ADAPTER } from './interfaces/whatsapp-adapter.interface';
 import { getQueueToken } from '@nestjs/bull';
@@ -45,6 +46,15 @@ describe('WhatsAppService', () => {
     processMessageInConversation: jest.fn(),
   };
 
+  // Defaults to "do not escalate", so the existing tests exercise the same
+  // clarification path they always did.
+  const mockHumanHandoff = {
+    shouldEscalate: jest.fn().mockResolvedValue(false),
+    registerClarification: jest.fn().mockResolvedValue(1),
+    escalate: jest.fn().mockResolvedValue(true),
+    buildCustomerMessage: jest.fn().mockReturnValue('A human will reply.'),
+  };
+
   const mockConfigService = {
     get: jest.fn((key: string, defaultVal?: any) => {
       const config: Record<string, any> = {
@@ -73,6 +83,7 @@ describe('WhatsAppService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AiEngineService, useValue: mockAiEngine },
         { provide: ConversationsService, useValue: mockConversationsService },
+        { provide: HumanHandoffService, useValue: mockHumanHandoff },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: WHATSAPP_ADAPTER, useValue: mockWhatsAppAdapter },
         { provide: getQueueToken('message-processing'), useValue: mockQueue },

@@ -22,6 +22,21 @@ export interface ConversationSession {
   missingFields: string[];
   createdAt: string; // ISO timestamp
   lastUpdatedAt: string; // ISO timestamp
+
+  /**
+   * How many times the AI has asked this customer to clarify.
+   *
+   * Optional on purpose: sessions already living in Redis were serialised
+   * without it, and they must keep deserialising. `undefined` reads as zero.
+   */
+  clarificationAttempts?: number;
+
+  /**
+   * Set once the conversation has been escalated to a human, so the owner is
+   * notified exactly once and the AI stops sending automated clarifications.
+   * Clears naturally with the 30-minute session TTL.
+   */
+  handedOffAt?: string; // ISO timestamp
 }
 
 /**
