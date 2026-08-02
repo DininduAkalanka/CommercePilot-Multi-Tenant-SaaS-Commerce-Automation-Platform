@@ -10,6 +10,7 @@ import {
   Package,
   MessageSquare,
   BarChart3,
+  Bot,
   Settings,
   LogOut,
   Bell,
@@ -51,6 +52,7 @@ const NAV_GROUPS: { label: string; items: { href: string; icon: typeof LayoutDas
     label: 'Insights',
     items: [
       { href: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },
+      { href: '/dashboard/ai-performance', icon: Bot, label: 'AI Performance' },
       { href: '/dashboard/notifications', icon: Bell, label: 'Notifications' },
     ],
   },

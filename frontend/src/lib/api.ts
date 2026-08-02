@@ -255,4 +255,10 @@ export const notificationsApi = {
   markAsRead: (id: string) => api.patch(`/notifications/${id}/read`),
 };
 
+// ── AI Engine API ─────────────────────────────────────────────────
+export const aiEngineApi = {
+  /** GET /api/v1/ai-engine/metrics — pipeline health, confidence, correction rate */
+  getMetrics: (days = 7) => api.get('/ai-engine/metrics', { params: { days } }),
+};
+
 export default api;
