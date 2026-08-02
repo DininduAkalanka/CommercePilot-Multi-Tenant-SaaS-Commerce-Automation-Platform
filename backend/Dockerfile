@@ -35,10 +35,14 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY package.json ./
 
+COPY docker-entrypoint.sh ./
+RUN chmod +x ./docker-entrypoint.sh
+
 # Render assigns the port via $PORT and detects it automatically; EXPOSE is
 # documentation only. main.ts reads process.env.PORT.
 EXPOSE 3001
 
-# Apply any pending migrations (idempotent — only committed migrations run),
-# then start the API together with its in-process BullMQ worker.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+# Applies pending migrations (idempotent — only committed migrations run),
+# retrying past a cold scale-to-zero database, then starts the API together
+# with its in-process BullMQ worker. See the script for the full rationale.
+CMD ["./docker-entrypoint.sh"]

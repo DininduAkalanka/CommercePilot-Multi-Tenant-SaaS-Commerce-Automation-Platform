@@ -1,0 +1,8 @@
+# Shell scripts must keep LF endings regardless of the checkout platform.
+# This repo is developed on Windows but the scripts run in Linux containers;
+# a CRLF shebang line makes the kernel fail with "bad interpreter".
+*.sh text eol=lf
+
+# Same reasoning for files consumed by the Linux image build.
+Dockerfile text eol=lf
+*.dockerfile text eol=lf

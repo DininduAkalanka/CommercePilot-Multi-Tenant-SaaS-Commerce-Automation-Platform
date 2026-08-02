@@ -39,7 +39,12 @@ services:
         value: mailhog
 
       # ── Secrets — set these in the Render dashboard (sync: false) ────
-      - key: DATABASE_URL      # Neon pooled connection string (sslmode=require)
+      # Must be the Neon DIRECT (non-pooled) string — the host must NOT
+      # contain "-pooler". Prisma Migrate takes a session-scoped advisory
+      # lock, which a transaction-mode pooler cannot hold, so migrations fail
+      # with P1002 on every deploy. Matches DEPLOYMENT.md §"Turn OFF the
+      # Pooled connection toggle".
+      - key: DATABASE_URL      # Neon direct connection string (sslmode=require)
         sync: false
       - key: REDIS_URL         # Upstash rediss://default:PASSWORD@host:6379
         sync: false
