@@ -1,0 +1,16 @@
+-- Capture the Meta "referral" object that arrives with a message originating
+-- from a Click-to-WhatsApp ad or a post CTA.
+--
+-- Meta sends it on the FIRST message of such a conversation, and it names the
+-- exact ad or post the customer tapped:
+--
+--   { "source_type": "ad", "source_id": "...", "headline": "Blue Cotton
+--     Shirt - New Arrival", "body": "...", "image_url": "...", "ctwa_clid": "" }
+--
+-- The pipeline previously read only type/from/id/text.body and discarded this
+-- entirely — throwing away the single most reliable signal available about
+-- WHICH product the customer is asking about, before they type a word.
+--
+-- Nullable and additive: every existing row stays valid, and a message that
+-- did not come from an ad simply has NULL.
+ALTER TABLE "whatsapp_messages" ADD COLUMN IF NOT EXISTS "referral" JSONB;

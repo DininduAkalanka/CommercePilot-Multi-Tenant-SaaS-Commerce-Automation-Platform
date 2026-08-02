@@ -16,6 +16,15 @@ export interface ProcessMessageInput {
   messageText: string;
   /** Previous messages in this conversation — for multi-turn extraction */
   conversationHistory?: string[];
+  /**
+   * Text from the Meta ad or post the customer tapped to open this chat.
+   *
+   * Customers arriving from social media routinely say only "mata meka one"
+   * ("I want this") because, to them, the product is obvious — they are
+   * looking at it. The message alone is unmatchable; the ad's own headline
+   * names the product exactly.
+   */
+  referralHint?: string | null;
   // Tenant config
   autoApproveEnabled: boolean;
   autoApproveThreshold: number;
@@ -100,6 +109,7 @@ export class AiEngineService {
       input.tenantId,
       input.messageId,
       input.messageText,
+      input.referralHint,
     );
 
     if (products.length === 0) {

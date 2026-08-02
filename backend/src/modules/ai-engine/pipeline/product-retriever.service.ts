@@ -51,22 +51,37 @@ export class ProductRetrieverService {
     tenantId: string,
     messageId: string,
     messageText: string,
+    referralHint?: string | null,
   ): Promise<{ products: RetrievedProduct[]; catalogContext: string }> {
     const startTime = Date.now();
+
+    // A customer who tapped an ad often says only "mata meka one" ("I want
+    // this") — obvious to them, unmatchable on its own. Appending the ad's own
+    // headline gives retrieval something to match, without discarding what the
+    // customer actually said (they may have specified a size or colour).
+    const searchText = referralHint
+      ? `${messageText} ${referralHint}`.trim()
+      : messageText;
+
+    if (referralHint) {
+      this.logger.log(
+        `[${tenantId}] Using referral hint for retrieval: "${referralHint.slice(0, 60)}"`,
+      );
+    }
 
     let products: RetrievedProduct[];
 
     try {
       // Try vector search first (requires pgvector + product embeddings)
-      products = await this.vectorSearch(tenantId, messageText);
+      products = await this.vectorSearch(tenantId, searchText);
 
       if (products.length === 0) {
         // Fallback to text-based search
-        products = await this.textSearch(tenantId, messageText);
+        products = await this.textSearch(tenantId, searchText);
       }
     } catch (error) {
       this.logger.warn(`Vector search failed, using text search: ${error}`);
-      products = await this.textSearch(tenantId, messageText);
+      products = await this.textSearch(tenantId, searchText);
     }
 
     const processingTimeMs = Date.now() - startTime;
