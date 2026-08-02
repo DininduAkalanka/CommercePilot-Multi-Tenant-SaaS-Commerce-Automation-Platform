@@ -30,6 +30,14 @@ export class ProductRetrieverService {
   private readonly logger = new Logger(ProductRetrieverService.name);
   private readonly TOP_K = 5; // Number of products to retrieve
 
+  /**
+   * Cosine-similarity floor for vector search (0..1). Below this a product is
+   * treated as irrelevant rather than being offered to the LLM as grounding.
+   */
+  private readonly MIN_SIMILARITY = Number(
+    process.env.RAG_MIN_SIMILARITY ?? '0.5',
+  );
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gemini: GeminiAdapter,
@@ -115,6 +123,18 @@ export class ProductRetrieverService {
     try {
       const embedding = await this.gemini.generateEmbedding(textToEmbed);
 
+      if (embedding === null) {
+        // No embedding available (no API key, or the call failed). Leave the
+        // column NULL rather than writing a placeholder — vectorSearch filters
+        // on `embedding IS NOT NULL`, so this product cleanly degrades to text
+        // search instead of being matched on meaningless coordinates.
+        this.logger.warn(
+          `[${tenantId}] No embedding available for "${product.name}" — ` +
+            'leaving it NULL so retrieval falls back to text search',
+        );
+        return;
+      }
+
       // Store embedding using raw SQL (Prisma doesn't support vector type natively)
       await this.prisma.$executeRaw`
         UPDATE products
@@ -126,9 +146,7 @@ export class ProductRetrieverService {
         `[${tenantId}] Embedding generated for product: ${product.name}`,
       );
     } catch (error) {
-      this.logger.error(
-        `Failed to generate embedding for ${productId}: ${error}`,
-      );
+      this.logger.error(`Failed to store embedding for ${productId}: ${error}`);
     }
   }
 
@@ -140,7 +158,21 @@ export class ProductRetrieverService {
   ): Promise<RetrievedProduct[]> {
     const queryEmbedding = await this.gemini.generateEmbedding(query);
 
-    // pgvector cosine similarity search
+    // No embedding for the query means no meaningful vector comparison is
+    // possible. Return empty so retrieve() falls through to text search
+    // rather than ranking the catalog against a meaningless vector.
+    if (queryEmbedding === null) {
+      return [];
+    }
+
+    const vector = JSON.stringify(queryEmbedding);
+
+    // pgvector cosine similarity search.
+    //
+    // The similarity floor matters: without it this always returned the TOP_K
+    // "least dissimilar" rows no matter how irrelevant, and those rows were
+    // then handed to the extractor as authoritative catalog grounding —
+    // encouraging exactly the hallucinated product matches RAG exists to stop.
     const results = await this.prisma.$queryRaw<RetrievedProduct[]>`
       SELECT
         id,
@@ -150,35 +182,109 @@ export class ProductRetrieverService {
         price::float,
         stock_quantity as "stockQuantity",
         attributes,
-        1 - (embedding <=> ${JSON.stringify(queryEmbedding)}::vector) AS similarity
+        1 - (embedding <=> ${vector}::vector) AS similarity
       FROM products
       WHERE
         tenant_id = ${tenantId}::uuid
         AND is_active = true
         AND deleted_at IS NULL
         AND embedding IS NOT NULL
-      ORDER BY embedding <=> ${JSON.stringify(queryEmbedding)}::vector
+        AND 1 - (embedding <=> ${vector}::vector) >= ${this.MIN_SIMILARITY}
+      ORDER BY embedding <=> ${vector}::vector
       LIMIT ${this.TOP_K}
     `;
 
     return results;
   }
 
+  /**
+   * Words carrying no product signal. Matching on these would return the
+   * entire catalog for a message like "do you have this in stock".
+   */
+  private static readonly STOP_WORDS = new Set([
+    'a',
+    'an',
+    'and',
+    'are',
+    'buy',
+    'can',
+    'could',
+    'delivery',
+    'do',
+    'does',
+    'for',
+    'get',
+    'give',
+    'have',
+    'hello',
+    'hey',
+    'hi',
+    'how',
+    'i',
+    'in',
+    'is',
+    'it',
+    'like',
+    'me',
+    'my',
+    'need',
+    'of',
+    'one',
+    'order',
+    'please',
+    'send',
+    'some',
+    'thanks',
+    'that',
+    'the',
+    'this',
+    'to',
+    'want',
+    'was',
+    'we',
+    'what',
+    'when',
+    'where',
+    'which',
+    'will',
+    'with',
+    'would',
+    'you',
+    'your',
+  ]);
+
   private async textSearch(
     tenantId: string,
     query: string,
   ): Promise<RetrievedProduct[]> {
-    // Simple case-insensitive text search as fallback
+    // The whole message used to be passed straight to `contains`, so
+    // "I want to buy a mouse" was matched literally against product names —
+    // which never hits "Wireless Mouse". The fallback therefore returned
+    // nothing almost every time it was needed. Match on meaningful terms
+    // instead, and OR them together.
+    const terms = query
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .filter(
+        (term) =>
+          term.length > 2 && !ProductRetrieverService.STOP_WORDS.has(term),
+      )
+      .slice(0, 10); // bound the OR clause
+
+    if (terms.length === 0) {
+      return [];
+    }
+
     const products = await this.prisma.product.findMany({
       where: {
         tenantId,
         isActive: true,
         deletedAt: null,
-        OR: [
-          { name: { contains: query, mode: 'insensitive' } },
-          { description: { contains: query, mode: 'insensitive' } },
-          { sku: { contains: query, mode: 'insensitive' } },
-        ],
+        OR: terms.flatMap((term) => [
+          { name: { contains: term, mode: 'insensitive' as const } },
+          { description: { contains: term, mode: 'insensitive' as const } },
+          { sku: { contains: term, mode: 'insensitive' as const } },
+        ]),
       },
       take: this.TOP_K,
     });

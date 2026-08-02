@@ -38,6 +38,12 @@ COPY package.json ./
 COPY docker-entrypoint.sh ./
 RUN chmod +x ./docker-entrypoint.sh
 
+# Drop root. The image previously ran as uid 0, so any RCE in a dependency
+# started with full container privileges. `node` (uid 1000) ships with the
+# base image. Ownership is set so Prisma can still write its engine cache.
+RUN chown -R node:node /app
+USER node
+
 # Render assigns the port via $PORT and detects it automatically; EXPOSE is
 # documentation only. main.ts reads process.env.PORT.
 EXPOSE 3001

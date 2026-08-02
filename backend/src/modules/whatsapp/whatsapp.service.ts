@@ -56,17 +56,21 @@ export class WhatsAppService {
   async handleIncomingWebhook(
     payload: Record<string, unknown>,
     signature: string,
+    rawBody?: Buffer,
   ): Promise<void> {
-    try {
-      // Verify HMAC-SHA256 signature from Meta (skip in mock mode for local dev)
-      const provider = this.configService.get<string>(
-        'WHATSAPP_PROVIDER',
-        'mock',
-      );
-      if (provider !== 'mock') {
-        this.verifyWebhookSignature(payload, signature);
-      }
+    // Signature verification sits OUTSIDE the try/catch below on purpose.
+    // A bad signature means the caller is not Meta, and that must surface as
+    // a 403 — not be swallowed into the "always return 200" path, which would
+    // silently accept forged webhooks.
+    const provider = this.configService.get<string>(
+      'WHATSAPP_PROVIDER',
+      'mock',
+    );
+    if (provider !== 'mock') {
+      this.verifyWebhookSignature(rawBody, signature);
+    }
 
+    try {
       const entry = (payload as any)?.entry?.[0];
       if (!entry) return;
 
@@ -418,14 +422,20 @@ export class WhatsAppService {
   }
 
   /**
-   * Verify the HMAC-SHA256 signature from the Meta webhook payload.
-   * Meta sends the signature in the `x-hub-signature-256` header as `sha256=<hex>`.
-   * Uses timing-safe comparison to prevent timing attacks.
+   * Verify the HMAC-SHA256 signature Meta sends in `x-hub-signature-256`
+   * as `sha256=<hex>`.
    *
-   * @throws ForbiddenException if signature is missing or invalid
+   * The digest MUST be computed over the raw request bytes. It previously ran
+   * over `JSON.stringify(parsedBody)`, which re-serialises the payload — key
+   * order, unicode escaping and whitespace all differ from what Meta actually
+   * signed, so the digest could never match real traffic. That failure was
+   * invisible because the caller swallowed the exception and returned 200:
+   * every genuine customer order would have been dropped without a trace.
+   *
+   * @throws ForbiddenException if the signature is missing, malformed or wrong
    */
   private verifyWebhookSignature(
-    payload: Record<string, unknown>,
+    rawBody: Buffer | undefined,
     signature: string,
   ): void {
     const appSecret = this.configService.get<string>('WHATSAPP_APP_SECRET');
@@ -437,24 +447,41 @@ export class WhatsAppService {
       return;
     }
 
+    if (!rawBody || rawBody.length === 0) {
+      // Without the raw bytes any comparison would be meaningless, so fail
+      // closed rather than silently accepting the request.
+      this.logger.error(
+        'Raw request body unavailable — cannot verify webhook signature. ' +
+          'Ensure NestFactory.create is called with { rawBody: true }.',
+      );
+      throw new ForbiddenException('Unable to verify webhook signature');
+    }
+
     if (!signature) {
       throw new ForbiddenException(
         'Missing webhook signature header (x-hub-signature-256)',
       );
     }
 
-    const signatureHash = signature.replace('sha256=', '');
-    const expectedHash = crypto
+    const expected = crypto
       .createHmac('sha256', appSecret)
-      .update(JSON.stringify(payload))
-      .digest('hex');
+      .update(rawBody)
+      .digest();
 
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(signatureHash, 'hex'),
-      Buffer.from(expectedHash, 'hex'),
-    );
+    let received: Buffer;
+    try {
+      received = Buffer.from(signature.replace('sha256=', ''), 'hex');
+    } catch {
+      throw new ForbiddenException('Malformed webhook signature');
+    }
 
-    if (!isValid) {
+    // timingSafeEqual throws RangeError on a length mismatch, which would
+    // escape as a 500 and leak that the length was wrong. Compare lengths
+    // first, then compare contents in constant time.
+    if (
+      received.length !== expected.length ||
+      !crypto.timingSafeEqual(received, expected)
+    ) {
       this.logger.warn(
         'Invalid webhook signature received — rejecting payload',
       );

@@ -11,6 +11,10 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug'],
+    // Retains the unparsed request bytes on `req.rawBody`. The Meta webhook
+    // signs the raw payload, so its HMAC can only be verified against these
+    // exact bytes — a re-serialised JSON body produces a different digest.
+    rawBody: true,
   });
 
   // ── Security ────────────────────────────────────────────────
@@ -79,14 +83,24 @@ async function bootstrap() {
   app.useGlobalInterceptors(new CorrelationInterceptor());
 
   // ── Swagger Configuration ────────────────────────────────────
-  const config = new DocumentBuilder()
-    .setTitle('CommercePilot API')
-    .setDescription('The CommercePilot API for WhatsApp-first businesses')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Served outside production only. A public /api/docs on a live multi-tenant
+  // service hands an attacker the complete API surface — every route, DTO
+  // shape and auth requirement — for free. Set SWAGGER_ENABLED=true to expose
+  // it deliberately (e.g. on a staging deployment).
+  const swaggerEnabled =
+    process.env.SWAGGER_ENABLED === 'true' ||
+    process.env.NODE_ENV !== 'production';
+
+  if (swaggerEnabled) {
+    const config = new DocumentBuilder()
+      .setTitle('CommercePilot API')
+      .setDescription('The CommercePilot API for WhatsApp-first businesses')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
@@ -94,7 +108,11 @@ async function bootstrap() {
   logger.log(
     `🚀 CommercePilot API running on: http://localhost:${port}/api/v1`,
   );
-  logger.log(`📚 Swagger documentation: http://localhost:${port}/api/docs`);
+  logger.log(
+    swaggerEnabled
+      ? `📚 Swagger documentation: http://localhost:${port}/api/docs`
+      : '📚 Swagger disabled in production (set SWAGGER_ENABLED=true to expose)',
+  );
   logger.log(`📧 MailHog web UI: http://localhost:8025`);
   logger.log(`🌍 Environment: ${process.env.NODE_ENV ?? 'development'}`);
 }

@@ -10,7 +10,10 @@ import {
   Logger,
   BadRequestException,
   UseGuards,
+  Req,
 } from '@nestjs/common';
+import type { RawBodyRequest } from '@nestjs/common';
+import type { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -22,6 +25,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { WhatsAppService } from './whatsapp.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
+import { SimulateMessageDto } from './dto/simulate-message.dto';
 
 /**
  * WhatsAppController
@@ -77,8 +81,15 @@ export class WhatsAppController {
   async receiveMessage(
     @Body() payload: Record<string, unknown>,
     @Headers('x-hub-signature-256') signature: string,
+    @Req() req: RawBodyRequest<Request>,
   ): Promise<{ status: string }> {
-    await this.whatsappService.handleIncomingWebhook(payload, signature);
+    // req.rawBody carries the exact bytes Meta signed; the parsed `payload`
+    // cannot be used for HMAC verification (see verifyWebhookSignature).
+    await this.whatsappService.handleIncomingWebhook(
+      payload,
+      signature,
+      req.rawBody,
+    );
     return { status: 'received' };
   }
 
@@ -97,7 +108,7 @@ export class WhatsAppController {
   })
   async simulateMessage(
     @CurrentTenant() tenantId: string,
-    @Body() body: { phone: string; message: string },
+    @Body() body: SimulateMessageDto,
   ) {
     const result = await this.whatsappService.simulateIncomingMessage(
       tenantId,
