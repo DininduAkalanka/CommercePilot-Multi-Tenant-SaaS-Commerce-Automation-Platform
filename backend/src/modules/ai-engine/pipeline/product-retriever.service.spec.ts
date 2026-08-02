@@ -86,6 +86,71 @@ describe('ProductRetrieverService', () => {
     });
   });
 
+  describe('referral hint', () => {
+    /**
+     * A customer arriving from a Click-to-WhatsApp ad often says only
+     * "mata meka one" ("I want this") — obvious to them because they are
+     * looking at the product, but unmatchable on its own. The ad's headline
+     * names it exactly, so retrieval must search on both.
+     */
+    it('searches on the ad copy as well as the customer message', async () => {
+      mockGemini.generateEmbedding.mockResolvedValue(null);
+      mockPrisma.product.findMany.mockResolvedValue([]);
+
+      await service.retrieve(
+        'tenant-1',
+        'msg-1',
+        'mata meka one',
+        'Blue Cotton Shirt New Arrival',
+      );
+
+      const where = mockPrisma.product.findMany.mock.calls[0][0].where;
+      const searched = where.OR.map(
+        (clause: Record<string, { contains: string }>) =>
+          Object.values(clause)[0].contains,
+      );
+
+      // Terms from the ad copy make the product findable...
+      expect(searched).toContain('blue');
+      expect(searched).toContain('cotton');
+      expect(searched).toContain('shirt');
+      // ...and the customer's own words are still included, since they may
+      // carry a size or colour the ad did not mention.
+      expect(searched).toContain('meka');
+    });
+
+    it('behaves exactly as before when there is no referral', async () => {
+      mockGemini.generateEmbedding.mockResolvedValue(null);
+      mockPrisma.product.findMany.mockResolvedValue([]);
+
+      await service.retrieve('tenant-1', 'msg-1', 'I want a mouse');
+
+      const where = mockPrisma.product.findMany.mock.calls[0][0].where;
+      const searched = where.OR.map(
+        (clause: Record<string, { contains: string }>) =>
+          Object.values(clause)[0].contains,
+      );
+
+      expect(searched).toContain('mouse');
+      expect(searched).not.toContain('undefined');
+      expect(searched).not.toContain('null');
+    });
+
+    it('embeds the combined text for vector search', async () => {
+      mockGemini.generateEmbedding.mockResolvedValue(new Array(768).fill(0.1));
+      mockPrisma.$queryRaw.mockResolvedValue([]);
+      mockPrisma.product.findMany.mockResolvedValue([]);
+
+      await service.retrieve('tenant-1', 'msg-1', 'meka one', 'Cotton Saree');
+
+      // The query vector must represent the ad copy too, or semantic search is
+      // still working from an empty message.
+      expect(mockGemini.generateEmbedding).toHaveBeenCalledWith(
+        expect.stringContaining('Cotton Saree'),
+      );
+    });
+  });
+
   describe('raw SQL identifiers', () => {
     /**
      * Regression: the raw vector query used snake_case (`tenant_id`,

@@ -11,10 +11,16 @@ import type { IWhatsAppAdapter } from './interfaces/whatsapp-adapter.interface';
 import { WHATSAPP_ADAPTER } from './interfaces/whatsapp-adapter.interface';
 import { MockWhatsAppAdapter } from './adapters/mock-whatsapp.adapter';
 import {
+  parseReferral,
+  buildReferralHint,
+} from './interfaces/referral.interface';
+import type { WhatsAppReferral } from './interfaces/referral.interface';
+import {
   MessageDirection,
   MessageType,
   MessageStatus,
   ConversationStage,
+  Prisma,
 } from '@prisma/client';
 
 /**
@@ -150,6 +156,12 @@ export class WhatsAppService {
     const externalId = rawMessage.id as string;
     const text = (rawMessage.text as any)?.body ?? '';
 
+    // Meta attaches this when the customer arrived from a Click-to-WhatsApp ad
+    // or a post CTA. It names the exact ad/post they tapped, which identifies
+    // the product they were looking at before they type a word — the single
+    // most reliable signal available, and previously discarded.
+    const referral = parseReferral(rawMessage.referral);
+
     if (messageType !== MessageType.TEXT || !text) {
       this.logger.log(
         `[${tenantId}] Non-text message from ${phone} — skipping`,
@@ -157,7 +169,7 @@ export class WhatsAppService {
       return;
     }
 
-    await this.processIncomingText(tenantId, phone, text, externalId);
+    await this.processIncomingText(tenantId, phone, text, externalId, referral);
   }
 
   private async processIncomingText(
@@ -165,6 +177,7 @@ export class WhatsAppService {
     phone: string,
     text: string,
     externalMessageId: string,
+    referral: WhatsAppReferral | null = null,
   ): Promise<void> {
     // ── Step 1: Deduplicate ──────────────────────────────────────
     const existing = await this.prisma.whatsAppMessage.findFirst({
@@ -203,6 +216,11 @@ export class WhatsAppService {
         status: MessageStatus.RECEIVED,
         externalMessageId,
         conversationId: conversation.id,
+        // Persisted even when nothing consumes it yet: it is attribution data
+        // that cannot be recovered later if dropped now.
+        referral: referral
+          ? (referral as unknown as Prisma.InputJsonValue)
+          : undefined,
       },
     });
 
@@ -290,6 +308,9 @@ export class WhatsAppService {
       messageId: message.id,
       messageText: text,
       conversationHistory, // Phase 2: pass history for multi-turn extraction
+      // The ad copy the customer tapped, if any. "Blue Cotton Shirt - New
+      // Arrival" is a far better retrieval query than "mata meka one".
+      referralHint: buildReferralHint(referral),
       autoApproveEnabled: tenant.autoApproveEnabled,
       autoApproveThreshold: tenant.autoApproveThreshold,
       aiConfidenceThreshold: tenant.aiConfidenceThreshold,

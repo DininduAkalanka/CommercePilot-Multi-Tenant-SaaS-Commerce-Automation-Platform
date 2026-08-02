@@ -276,6 +276,12 @@ model WhatsAppMessage {
   mediaUrl  String?
   mediaType String?
 
+  /// Meta "referral" object, present when the customer arrived from a
+  /// Click-to-WhatsApp ad or a post CTA. Names the exact ad/post they tapped
+  /// (source_id, headline, body, image_url), which identifies the product they
+  /// were looking at before they type anything.
+  referral Json?
+
   // AI processing state
   aiProcessed   Boolean  @default(false)
   aiProcessedAt DateTime?
