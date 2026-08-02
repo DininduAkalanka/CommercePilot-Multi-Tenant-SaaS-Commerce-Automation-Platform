@@ -16,6 +16,7 @@ import {
   OrderSource,
   Prisma,
 } from '@prisma/client';
+import type { CorrectedDataDto } from './dto/correct-draft.dto';
 
 /**
  * OrdersService
@@ -588,7 +589,7 @@ export class OrdersService {
   async saveDraftCorrections(
     tenantId: string,
     draftId: string,
-    correctedData: Record<string, unknown>,
+    correctedData: CorrectedDataDto,
     userId: string,
   ): Promise<void> {
     const draft = await this.prisma.aIDraftOrder.findFirst({
@@ -612,7 +613,7 @@ export class OrdersService {
     const originalData = draft.structuredData as Record<string, unknown>;
     const fieldsCorrected = this.computeCorrectedFields(
       originalData,
-      correctedData,
+      correctedData as unknown as Record<string, unknown>,
     );
 
     const corrections = {
@@ -636,16 +637,27 @@ export class OrdersService {
       });
 
       // 2. Create new draft items
-      const itemsList = (correctedData.items as any[]) || [];
+      const itemsList = correctedData.items ?? [];
       for (const item of itemsList) {
-        const productId = item.matched_product_id || item.productId || null;
-        let unitPrice = item.unitPrice || item.unit_price || null;
+        const productId = item.matched_product_id ?? null;
+        let unitPrice: Prisma.Decimal | number | null = item.unitPrice ?? null;
 
-        if (productId && !unitPrice) {
-          const product = await tx.product.findUnique({
-            where: { id: productId },
+        if (productId) {
+          // Tenant-scoped on purpose. `productId` comes straight from the
+          // request body, so an unscoped findUnique here let any authenticated
+          // owner read another tenant's catalog by guessing a product id — and
+          // copy that tenant's price onto their own draft.
+          const product = await tx.product.findFirst({
+            where: { id: productId, tenantId, deletedAt: null },
           });
-          if (product) {
+
+          if (!product) {
+            throw new BadRequestException(
+              `Product not found in this catalog: ${productId}`,
+            );
+          }
+
+          if (!unitPrice) {
             unitPrice = product.price;
           }
         }
@@ -656,16 +668,17 @@ export class OrdersService {
             tenantId,
             draftOrderId: draftId,
             productId,
-            productQuery: item.product_query || item.productQuery || '',
-            matchedProductName:
-              item.matched_product_name || item.matchedProductName || null,
-            matchConfidence:
-              item.match_confidence || item.matchConfidence || 1.0,
-            quantity: item.quantity ?? 1,
+            // The camelCase fallbacks that used to sit here are gone: the DTO
+            // now fixes the wire format as snake_case (what both the dashboard
+            // and the AI extractor send), and forbidNonWhitelisted would
+            // reject a camelCase payload before it ever reached this point.
+            productQuery: item.product_query ?? '',
+            matchedProductName: item.matched_product_name ?? null,
+            matchConfidence: item.match_confidence ?? 1.0,
+            quantity: item.quantity,
             unitPrice: unitPrice,
-            selectedAttributes: (item.selected_attributes ||
-              item.selectedAttributes ||
-              {}) as object,
+            selectedAttributes: (item.selected_attributes ??
+              {}) as Prisma.InputJsonValue,
           },
         });
       }

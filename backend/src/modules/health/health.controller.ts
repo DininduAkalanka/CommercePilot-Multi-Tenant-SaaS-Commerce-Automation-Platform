@@ -1,5 +1,6 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../../common/database/prisma.service';
 
 interface LivenessStatus {
@@ -30,6 +31,9 @@ interface ReadinessStatus {
  */
 @ApiTags('Health')
 @Controller('health')
+// The platform health check and any uptime monitor poll these continuously;
+// throttling them would make the service look unhealthy and trigger restarts.
+@SkipThrottle()
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 

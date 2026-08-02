@@ -18,6 +18,7 @@ import {
   ApiExcludeEndpoint,
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle } from '@nestjs/throttler';
 import { WhatsAppService } from './whatsapp.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
@@ -46,6 +47,7 @@ export class WhatsAppController {
    * Meta calls this when you register the webhook URL.
    */
   @Get('webhook')
+  @SkipThrottle()
   @ApiExcludeEndpoint()
   verifyWebhook(
     @Query('hub.mode') mode: string,
@@ -69,6 +71,7 @@ export class WhatsAppController {
    * Always returns 200 immediately — processing is async via BullMQ.
    */
   @Post('webhook')
+  @SkipThrottle()
   @HttpCode(HttpStatus.OK)
   @ApiExcludeEndpoint()
   async receiveMessage(

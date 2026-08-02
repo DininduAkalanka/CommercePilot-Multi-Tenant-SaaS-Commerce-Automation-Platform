@@ -16,6 +16,19 @@ async function bootstrap() {
   // ── Security ────────────────────────────────────────────────
   app.use(helmet());
 
+  // ── Proxy awareness ─────────────────────────────────────────
+  // The rate limiter keys on the client IP. Behind a proxy (Render, and
+  // Cloudflare in front of it) req.ip is the *proxy's* address unless Express
+  // is told how many hops to trust — every caller would then share a single
+  // bucket and one noisy client would lock out everyone.
+  //
+  // The hop count is configurable because it is deployment-specific and both
+  // directions are harmful: too low collapses all clients into one bucket,
+  // too high lets a caller spoof X-Forwarded-For and slip the limit entirely.
+  // Verify against the live topology rather than assuming this default.
+  const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 1);
+  app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
+
   // ── CORS ────────────────────────────────────────────────────
   // Strip ALL whitespace (spaces, newlines, tabs) that can sneak into
   // FRONTEND_URL via copy-paste in a hosting dashboard. A URL never contains

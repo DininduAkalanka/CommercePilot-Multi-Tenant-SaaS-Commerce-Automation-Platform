@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { BullModule } from '@nestjs/bull';
 import { buildRedisConnection } from './common/redis/redis.util';
@@ -35,6 +36,10 @@ import { HealthModule } from './modules/health/health.module';
     }),
 
     // ── Rate Limiting ────────────────────────────────────────────
+    // Every named throttler here applies to every route, so this list stays
+    // limited to the general-purpose buckets. Stricter per-route limits (the
+    // credential endpoints) are set by overriding 'long' with @Throttle at the
+    // handler — adding a tighter named bucket here would apply it site-wide.
     ThrottlerModule.forRoot([
       { name: 'short', ttl: 1000, limit: 10 },
       { name: 'long', ttl: 60000, limit: 100 },
@@ -85,6 +90,16 @@ import { HealthModule } from './modules/health/health.module';
 
     // ── Ops: liveness/readiness probes for hosting + monitoring ──────
     HealthModule,
+  ],
+  providers: [
+    // ThrottlerModule only supplies configuration — without this binding the
+    // guard never runs and every limit above is inert. It was previously
+    // applied to a single controller, leaving /auth/login unthrottled and
+    // open to credential stuffing.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

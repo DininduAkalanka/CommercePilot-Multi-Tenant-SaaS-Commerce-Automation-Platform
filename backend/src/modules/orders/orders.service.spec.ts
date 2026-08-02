@@ -28,6 +28,7 @@ describe('OrdersService', () => {
     product: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
     },
     customer: {
@@ -244,7 +245,12 @@ describe('OrdersService', () => {
       mockPrisma.aIDraftOrder.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.saveDraftCorrections('tenant-1', 'missing', {}, 'user-1'),
+        service.saveDraftCorrections(
+          'tenant-1',
+          'missing',
+          { items: [] },
+          'user-1',
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -257,7 +263,12 @@ describe('OrdersService', () => {
       });
 
       await expect(
-        service.saveDraftCorrections('tenant-1', 'draft-1', {}, 'user-1'),
+        service.saveDraftCorrections(
+          'tenant-1',
+          'draft-1',
+          { items: [] },
+          'user-1',
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -275,6 +286,11 @@ describe('OrdersService', () => {
       mockPrisma.aIDraftOrderItem.create.mockResolvedValue({});
       mockPrisma.aIDraftOrder.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
+      mockPrisma.product.findFirst.mockResolvedValue({
+        id: 'correct-product',
+        tenantId: 'tenant-1',
+        price: 100,
+      });
 
       await service.saveDraftCorrections(
         'tenant-1',
@@ -294,6 +310,74 @@ describe('OrdersService', () => {
       const createOrder =
         mockPrisma.aIDraftOrderItem.create.mock.invocationCallOrder[0];
       expect(deleteOrder).toBeLessThan(createOrder);
+    });
+
+    // Regression: the product lookup that copies a price onto the corrected
+    // draft used to be `findUnique({ where: { id } })` with no tenant filter.
+    // Since the id comes straight from the request body, any authenticated
+    // owner could read another tenant's catalog by guessing a product id.
+    it('scopes the corrected item price lookup to the caller tenant', async () => {
+      mockPrisma.aIDraftOrder.findFirst.mockResolvedValue({
+        id: 'draft-1',
+        tenantId: 'tenant-1',
+        status: AIDraftStatus.PENDING,
+        structuredData: { items: [] },
+      });
+      mockPrisma.$transaction.mockImplementation(async (cb: any) =>
+        cb(mockPrisma),
+      );
+      mockPrisma.aIDraftOrderItem.deleteMany.mockResolvedValue({ count: 0 });
+      mockPrisma.aIDraftOrderItem.create.mockResolvedValue({});
+      mockPrisma.aIDraftOrder.update.mockResolvedValue({});
+      mockPrisma.auditLog.create.mockResolvedValue({});
+      mockPrisma.product.findFirst.mockResolvedValue({
+        id: 'product-1',
+        tenantId: 'tenant-1',
+        price: 250,
+      });
+
+      await service.saveDraftCorrections(
+        'tenant-1',
+        'draft-1',
+        { items: [{ matched_product_id: 'product-1', quantity: 2 }] },
+        'user-1',
+      );
+
+      expect(mockPrisma.product.findFirst).toHaveBeenCalledWith({
+        where: { id: 'product-1', tenantId: 'tenant-1', deletedAt: null },
+      });
+      // The unscoped call must be gone entirely.
+      expect(mockPrisma.product.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects a corrected item referencing a product outside the tenant', async () => {
+      mockPrisma.aIDraftOrder.findFirst.mockResolvedValue({
+        id: 'draft-1',
+        tenantId: 'tenant-1',
+        status: AIDraftStatus.PENDING,
+        structuredData: { items: [] },
+      });
+      mockPrisma.$transaction.mockImplementation(async (cb: any) =>
+        cb(mockPrisma),
+      );
+      mockPrisma.aIDraftOrderItem.deleteMany.mockResolvedValue({ count: 0 });
+      // Tenant-scoped lookup finds nothing — the product belongs elsewhere.
+      mockPrisma.product.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.saveDraftCorrections(
+          'tenant-1',
+          'draft-1',
+          {
+            items: [
+              { matched_product_id: 'other-tenants-product', quantity: 1 },
+            ],
+          },
+          'user-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.aIDraftOrderItem.create).not.toHaveBeenCalled();
     });
   });
 
