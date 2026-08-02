@@ -8,6 +8,7 @@ import { ConfidenceScorerService } from './pipeline/confidence-scorer.service';
 import { ConflictResolverService } from './pipeline/conflict-resolver.service';
 import { AiMetricsService } from './ai-metrics.service';
 import { AiMetricsController } from './ai-metrics.controller';
+import { UnfulfilledDemandService } from './unfulfilled-demand.service';
 
 @Module({
   controllers: [AiMetricsController],
@@ -20,6 +21,7 @@ import { AiMetricsController } from './ai-metrics.controller';
     ConfidenceScorerService,
     ConflictResolverService,
     AiMetricsService,
+    UnfulfilledDemandService,
   ],
   exports: [AiEngineService, ProductRetrieverService, ConflictResolverService],
 })

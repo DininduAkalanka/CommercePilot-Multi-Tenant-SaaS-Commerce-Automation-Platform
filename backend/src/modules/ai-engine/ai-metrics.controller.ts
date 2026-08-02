@@ -11,6 +11,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { UserRole } from '@prisma/client';
 import { AiMetricsService } from './ai-metrics.service';
+import { UnfulfilledDemandService } from './unfulfilled-demand.service';
 
 /**
  * Operational visibility into the AI pipeline.
@@ -24,7 +25,10 @@ import { AiMetricsService } from './ai-metrics.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class AiMetricsController {
-  constructor(private readonly aiMetricsService: AiMetricsService) {}
+  constructor(
+    private readonly aiMetricsService: AiMetricsService,
+    private readonly unfulfilledDemand: UnfulfilledDemandService,
+  ) {}
 
   @Get('metrics')
   @Roles(UserRole.OWNER, UserRole.SUPER_ADMIN)
@@ -44,6 +48,41 @@ export class AiMetricsController {
     const data = await this.aiMetricsService.getMetrics(
       tenantId,
       days ? Number(days) : 7,
+    );
+
+    return { success: true, data };
+  }
+
+  /**
+   * What customers asked for that the catalog could not satisfy.
+   *
+   * A stocking signal rather than an error report: every row is a real
+   * customer who tried to buy something and could not.
+   */
+  @Get('unfulfilled-demand')
+  @Roles(UserRole.OWNER, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Products customers asked for that could not be fulfilled',
+  })
+  @ApiQuery({
+    name: 'days',
+    required: false,
+    description: 'Window in days (1-365, default 30)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Max queries returned (1-100, default 20)',
+  })
+  async getUnfulfilledDemand(
+    @CurrentTenant() tenantId: string,
+    @Query('days') days?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const data = await this.unfulfilledDemand.getSummary(
+      tenantId,
+      days ? Number(days) : 30,
+      limit ? Number(limit) : 20,
     );
 
     return { success: true, data };
