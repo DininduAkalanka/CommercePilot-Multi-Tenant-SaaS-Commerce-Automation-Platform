@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { IRedisService } from '../interfaces/redis-service.interface';
@@ -14,7 +19,9 @@ import { buildRedisConnection } from '../../../common/redis/redis.util';
  * In test environments, this is replaced by a mock implementation.
  */
 @Injectable()
-export class IoRedisAdapter implements IRedisService, OnModuleInit, OnModuleDestroy {
+export class IoRedisAdapter
+  implements IRedisService, OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(IoRedisAdapter.name);
   private client: Redis;
 

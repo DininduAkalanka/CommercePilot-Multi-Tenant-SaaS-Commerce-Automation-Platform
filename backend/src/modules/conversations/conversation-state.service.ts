@@ -1,7 +1,7 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { REDIS_SERVICE } from './interfaces/redis-service.interface';
 import type { IRedisService } from './interfaces/redis-service.interface';
-import { ConversationStage, ConversationStatus } from '@prisma/client';
+import { ConversationStage } from '@prisma/client';
 
 /**
  * Conversation session stored in Redis.
@@ -56,7 +56,10 @@ export class ConversationStateService {
    * Get the current session for a customer from Redis.
    * Returns null if no active session exists (e.g., TTL expired).
    */
-  async getSession(tenantId: string, phone: string): Promise<ConversationSession | null> {
+  async getSession(
+    tenantId: string,
+    phone: string,
+  ): Promise<ConversationSession | null> {
     const key = this.buildKey(tenantId, phone);
     const raw = await this.redis.get(key);
     if (!raw) return null;
@@ -93,7 +96,9 @@ export class ConversationStateService {
     };
 
     await this.saveSession(tenantId, phone, session);
-    this.logger.log(`[${tenantId}] New conversation session created for ${phone}`);
+    this.logger.log(
+      `[${tenantId}] New conversation session created for ${phone}`,
+    );
     return session;
   }
 
@@ -136,7 +141,10 @@ export class ConversationStateService {
     const session = await this.getSession(tenantId, phone);
     if (!session) return;
 
-    session.partialOrderData = { ...session.partialOrderData, ...partialOrderData };
+    session.partialOrderData = {
+      ...session.partialOrderData,
+      ...partialOrderData,
+    };
     session.missingFields = missingFields;
     session.stage = newStage;
     session.lastUpdatedAt = new Date().toISOString();

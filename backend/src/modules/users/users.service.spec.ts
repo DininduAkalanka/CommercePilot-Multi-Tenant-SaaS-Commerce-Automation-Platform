@@ -116,7 +116,9 @@ describe('UsersService', () => {
       prismaUser.count.mockResolvedValue(0); // no other owners
 
       await expect(
-        service.update('tenant-1', 'admin', 'owner-1', { role: UserRole.STAFF }),
+        service.update('tenant-1', 'admin', 'owner-1', {
+          role: UserRole.STAFF,
+        }),
       ).rejects.toThrow(BadRequestException);
       expect(prismaUser.update).not.toHaveBeenCalled();
     });

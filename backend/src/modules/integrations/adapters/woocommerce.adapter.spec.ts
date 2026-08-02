@@ -98,7 +98,9 @@ describe('WooCommerceAdapter', () => {
         woocommerceSecret: null,
       });
 
-      await expect(adapter.initialize('tenant-A')).rejects.toThrow(/credentials missing/);
+      await expect(adapter.initialize('tenant-A')).rejects.toThrow(
+        /credentials missing/,
+      );
     });
   });
 });

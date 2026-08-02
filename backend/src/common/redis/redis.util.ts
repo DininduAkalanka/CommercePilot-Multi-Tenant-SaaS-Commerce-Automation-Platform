@@ -23,7 +23,9 @@ export type RedisConnection = string | RedisOptions;
  * Centralised here so the Bull queue (`app.module.ts`) and the application-level
  * Redis client (`IoRedisAdapter`) never drift apart in how they connect.
  */
-export function buildRedisConnection(configService: ConfigService): RedisConnection {
+export function buildRedisConnection(
+  configService: ConfigService,
+): RedisConnection {
   const url = configService.get<string>('REDIS_URL');
 
   if (url && url.trim().length > 0) {

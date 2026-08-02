@@ -63,9 +63,10 @@ export const SKIP_RESPONSE_TRANSFORM = 'skipResponseTransform';
  * Pagination is auto-detected from data containing `page`, `limit`, `total`, `totalPages`.
  */
 @Injectable()
-export class ResponseTransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
+export class ResponseTransformInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
   constructor(private readonly reflector: Reflector) {}
 
   intercept(
@@ -82,7 +83,7 @@ export class ResponseTransformInterceptor<T>
     }
 
     const request = context.switchToHttp().getRequest();
-    const correlationId = (request as any).correlationId;
+    const correlationId = request.correlationId;
 
     return next.handle().pipe(
       map((responseBody) => {
@@ -92,7 +93,7 @@ export class ResponseTransformInterceptor<T>
           typeof responseBody === 'object' &&
           'success' in responseBody
         ) {
-          const existing = responseBody as any;
+          const existing = responseBody;
           return {
             success: existing.success,
             message: existing.message,
@@ -123,9 +124,9 @@ export class ResponseTransformInterceptor<T>
    * Auto-detect pagination metadata from the response data.
    * If the data object contains page/limit/total/totalPages, extract it.
    */
-  private extractPagination(
-    data: unknown,
-  ): { pagination?: ApiResponse<unknown>['meta']['pagination'] } {
+  private extractPagination(data: unknown): {
+    pagination?: ApiResponse<unknown>['meta']['pagination'];
+  } {
     if (
       data &&
       typeof data === 'object' &&

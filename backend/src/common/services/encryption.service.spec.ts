@@ -14,8 +14,7 @@ function buildService(key?: string): EncryptionService {
 }
 
 describe('EncryptionService', () => {
-  const HEX_KEY =
-    'a'.repeat(64); // valid 32-byte key expressed as 64 hex chars
+  const HEX_KEY = 'a'.repeat(64); // valid 32-byte key expressed as 64 hex chars
   const PASSPHRASE = 'a-non-hex-passphrase-that-gets-hashed';
 
   describe('round-trip (hex key)', () => {

@@ -42,14 +42,23 @@ export class CustomersController {
   @ApiResponse({ status: 200, description: 'List of customers' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by name or phone' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Search by name or phone',
+  })
   async findAll(
     @CurrentUser('tenantId') tenantId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(15), ParseIntPipe) limit: number,
     @Query('search') search?: string,
   ) {
-    const data = await this.customersService.findAll(tenantId, page, limit, search);
+    const data = await this.customersService.findAll(
+      tenantId,
+      page,
+      limit,
+      search,
+    );
     return { success: true, data };
   }
 
@@ -100,7 +109,11 @@ export class CustomersController {
     @Param('id') id: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
-    const data = await this.customersService.findCustomerMessages(tenantId, id, limit);
+    const data = await this.customersService.findCustomerMessages(
+      tenantId,
+      id,
+      limit,
+    );
     return { success: true, data };
   }
 }

@@ -119,7 +119,11 @@ export class CustomersService {
    * Returns all messages in chronological order.
    * Enforces tenant isolation.
    */
-  async findCustomerMessages(tenantId: string, customerId: string, limit: number = 50) {
+  async findCustomerMessages(
+    tenantId: string,
+    customerId: string,
+    limit: number = 50,
+  ) {
     // First verify the customer belongs to this tenant
     const customer = await this.prisma.customer.findFirst({
       where: { id: customerId, tenantId, deletedAt: null },

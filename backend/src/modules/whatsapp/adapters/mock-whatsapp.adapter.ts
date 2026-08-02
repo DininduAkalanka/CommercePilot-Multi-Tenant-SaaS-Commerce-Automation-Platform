@@ -22,6 +22,13 @@ export class MockWhatsAppAdapter implements IWhatsAppAdapter {
   // In-memory message log for simulator UI
   private readonly sentMessages: SentMessage[] = [];
 
+  // `require-await` is disabled on the send methods below: they implement an
+  // inherently async interface (IWhatsAppAdapter), and the real Meta adapter
+  // does await a network call. Dropping `async` here to satisfy the rule would
+  // couple the interface's shape to whichever implementation happens to be
+  // synchronous — the mock must keep the same contract as production.
+
+  /* eslint-disable @typescript-eslint/require-await */
   async sendTextMessage(
     phone: string,
     message: string,
@@ -59,9 +66,7 @@ export class MockWhatsAppAdapter implements IWhatsAppAdapter {
       sentAt: new Date(),
     });
 
-    this.logger.log(
-      `📱 [MOCK WhatsApp] Template "${templateName}" → ${phone}`,
-    );
+    this.logger.log(`📱 [MOCK WhatsApp] Template "${templateName}" → ${phone}`);
 
     return { success: true, messageId };
   }
@@ -69,6 +74,7 @@ export class MockWhatsAppAdapter implements IWhatsAppAdapter {
   async markAsRead(_messageId: string): Promise<void> {
     // No-op in mock mode
   }
+  /* eslint-enable @typescript-eslint/require-await */
 
   /**
    * Returns all sent messages — used by the simulator UI endpoint.

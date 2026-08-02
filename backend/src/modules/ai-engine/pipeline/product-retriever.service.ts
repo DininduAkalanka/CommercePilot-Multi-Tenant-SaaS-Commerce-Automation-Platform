@@ -93,7 +93,10 @@ export class ProductRetrieverService {
    * Generate and store embedding for a product.
    * Called when a product is created or updated.
    */
-  async generateAndStoreEmbedding(productId: string, tenantId: string): Promise<void> {
+  async generateAndStoreEmbedding(
+    productId: string,
+    tenantId: string,
+  ): Promise<void> {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
     });
@@ -119,9 +122,13 @@ export class ProductRetrieverService {
         WHERE id = ${productId}::uuid AND tenant_id = ${tenantId}::uuid
       `;
 
-      this.logger.log(`[${tenantId}] Embedding generated for product: ${product.name}`);
+      this.logger.log(
+        `[${tenantId}] Embedding generated for product: ${product.name}`,
+      );
     } catch (error) {
-      this.logger.error(`Failed to generate embedding for ${productId}: ${error}`);
+      this.logger.error(
+        `Failed to generate embedding for ${productId}: ${error}`,
+      );
     }
   }
 

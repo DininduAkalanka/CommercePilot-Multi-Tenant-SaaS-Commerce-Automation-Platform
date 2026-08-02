@@ -1,18 +1,21 @@
 import { Injectable, Logger, Inject, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Queue } from 'bull';
+import type { Queue } from 'bull';
 import { InjectQueue } from '@nestjs/bull';
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../common/database/prisma.service';
 import { AiEngineService } from '../ai-engine/ai-engine.service';
 import { ConversationsService } from '../conversations/conversations.service';
-import type {
-  IWhatsAppAdapter,
-} from './interfaces/whatsapp-adapter.interface';
+import type { IWhatsAppAdapter } from './interfaces/whatsapp-adapter.interface';
 import { WHATSAPP_ADAPTER } from './interfaces/whatsapp-adapter.interface';
 import { MockWhatsAppAdapter } from './adapters/mock-whatsapp.adapter';
-import { MessageDirection, MessageType, MessageStatus, ConversationStage } from '@prisma/client';
+import {
+  MessageDirection,
+  MessageType,
+  MessageStatus,
+  ConversationStage,
+} from '@prisma/client';
 
 /**
  * WhatsAppService
@@ -38,9 +41,9 @@ export class WhatsAppService {
     private readonly conversationsService: ConversationsService,
     private readonly configService: ConfigService,
     @Inject(WHATSAPP_ADAPTER)
-    private readonly whatsappAdapter: any,
+    private readonly whatsappAdapter: IWhatsAppAdapter,
     @InjectQueue('message-processing')
-    private readonly messageProcessingQueue: any,
+    private readonly messageProcessingQueue: Queue,
   ) {}
 
   /**
@@ -56,7 +59,10 @@ export class WhatsAppService {
   ): Promise<void> {
     try {
       // Verify HMAC-SHA256 signature from Meta (skip in mock mode for local dev)
-      const provider = this.configService.get<string>('WHATSAPP_PROVIDER', 'mock');
+      const provider = this.configService.get<string>(
+        'WHATSAPP_PROVIDER',
+        'mock',
+      );
       if (provider !== 'mock') {
         this.verifyWebhookSignature(payload, signature);
       }
@@ -77,7 +83,9 @@ export class WhatsAppService {
       });
 
       if (!tenant) {
-        this.logger.warn(`No tenant found for phone number ID: ${phoneNumberId}`);
+        this.logger.warn(
+          `No tenant found for phone number ID: ${phoneNumberId}`,
+        );
         return;
       }
 
@@ -139,7 +147,9 @@ export class WhatsAppService {
     const text = (rawMessage.text as any)?.body ?? '';
 
     if (messageType !== MessageType.TEXT || !text) {
-      this.logger.log(`[${tenantId}] Non-text message from ${phone} — skipping`);
+      this.logger.log(
+        `[${tenantId}] Non-text message from ${phone} — skipping`,
+      );
       return;
     }
 
@@ -198,12 +208,21 @@ export class WhatsAppService {
     // ── Intercept CONFIRMING stage before AI pipeline ───────────
     if (session.stage === ConversationStage.CONFIRMING) {
       const trimmedText = text.trim().toLowerCase();
-      const isYes = /^(yes|yep|y|correct|ok|confirm|sure|yeah|agree|okey|agree|confirm|yeah)/i.test(trimmedText);
-      const isNo = /^(no|cancel|nope|stop|reject|incorrect|n|cancel)/i.test(trimmedText);
+      const isYes =
+        /^(yes|yep|y|correct|ok|confirm|sure|yeah|agree|okey|agree|confirm|yeah)/i.test(
+          trimmedText,
+        );
+      const isNo = /^(no|cancel|nope|stop|reject|incorrect|n|cancel)/i.test(
+        trimmedText,
+      );
 
       if (isYes) {
         // Transition to PENDING_ORDER
-        await this.conversationsService.transitionStage(tenantId, phone, ConversationStage.PENDING_ORDER);
+        await this.conversationsService.transitionStage(
+          tenantId,
+          phone,
+          ConversationStage.PENDING_ORDER,
+        );
 
         // Create the draft order in the database from context
         const draftOrderId = await this.aiEngine.createDraftFromContext(
@@ -212,7 +231,7 @@ export class WhatsAppService {
           message.id,
           text,
           session.partialOrderData,
-          0.90, // Confirmation implies high confidence
+          0.9, // Confirmation implies high confidence
         );
 
         // Send order acknowledgment template
@@ -227,7 +246,11 @@ export class WhatsAppService {
         return;
       } else if (isNo) {
         // Transition back to ACTIVE and clear session
-        await this.conversationsService.transitionStage(tenantId, phone, ConversationStage.ACTIVE);
+        await this.conversationsService.transitionStage(
+          tenantId,
+          phone,
+          ConversationStage.ACTIVE,
+        );
         await this.conversationsService.completeConversation(tenantId, phone); // Deletes Redis session
 
         const cancelMsg = `Understood. Your order draft has been cancelled. Let me know if you would like to order anything else! 😊`;
@@ -237,7 +260,11 @@ export class WhatsAppService {
         // Fallback for random replies in confirming stage
         const fallbackMsg = `Please reply with *Yes* to confirm your order or *No* to cancel.`;
         await this.whatsappAdapter.sendTextMessage(phone, fallbackMsg);
-        await this.conversationsService.addBotReply(tenantId, phone, fallbackMsg);
+        await this.conversationsService.addBotReply(
+          tenantId,
+          phone,
+          fallbackMsg,
+        );
         return;
       }
     }
@@ -277,7 +304,10 @@ export class WhatsAppService {
     }
 
     // ── Step 10: Send reply and update conversation ──────────────
-    if (nextStage === ConversationStage.GATHERING_INFO && result.missingFields.length > 0) {
+    if (
+      nextStage === ConversationStage.GATHERING_INFO &&
+      result.missingFields.length > 0
+    ) {
       // Missing fields — format missing info template
       const missingInfoList = result.missingFields.join(', ');
       const missingMsg = `To complete your order, could you please confirm: ${missingInfoList}?`;
@@ -286,23 +316,36 @@ export class WhatsAppService {
       await this.conversationsService.addBotReply(tenantId, phone, missingMsg);
 
       // Schedule check-abandoned job in BullMQ (30s in dev for easy verification, 24h in prod)
-      const delayMs = process.env.NODE_ENV === 'development' ? 30000 : 24 * 60 * 60 * 1000;
+      const delayMs =
+        process.env.NODE_ENV === 'development' ? 30000 : 24 * 60 * 60 * 1000;
       await this.messageProcessingQueue.add(
         'check-abandoned',
         { conversationId: session.conversationId, tenantId },
         { delay: delayMs, jobId: `abandoned:${session.conversationId}` },
       );
 
-      this.logger.log(`[${tenantId}] Missing info request sent and 24h abandoned check scheduled for ${phone}`);
-    } else if (nextStage === ConversationStage.CONFIRMING && result.extractedOrder) {
+      this.logger.log(
+        `[${tenantId}] Missing info request sent and 24h abandoned check scheduled for ${phone}`,
+      );
+    } else if (
+      nextStage === ConversationStage.CONFIRMING &&
+      result.extractedOrder
+    ) {
       // All info gathered — ask customer to confirm
       const itemsSummary = result.extractedOrder.items
-        .map((i: any) => `- ${i.quantity}x ${i.matched_product_name ?? i.product_query}`)
+        .map(
+          (i: any) =>
+            `- ${i.quantity}x ${i.matched_product_name ?? i.product_query}`,
+        )
         .join('\n');
       const confirmPrompt = `Here is your order summary:\n${itemsSummary}\n\nIs this correct? Please reply *Yes* to confirm or *No* to cancel.`;
 
       await this.whatsappAdapter.sendTextMessage(phone, confirmPrompt);
-      await this.conversationsService.addBotReply(tenantId, phone, confirmPrompt);
+      await this.conversationsService.addBotReply(
+        tenantId,
+        phone,
+        confirmPrompt,
+      );
 
       this.logger.log(`[${tenantId}] Confirmation prompt sent for ${phone}`);
     } else if (result.draftOrderId) {
@@ -389,13 +432,15 @@ export class WhatsAppService {
     if (!appSecret) {
       this.logger.warn(
         'WHATSAPP_APP_SECRET not configured — webhook signature verification skipped. ' +
-        'This is a security risk in production.',
+          'This is a security risk in production.',
       );
       return;
     }
 
     if (!signature) {
-      throw new ForbiddenException('Missing webhook signature header (x-hub-signature-256)');
+      throw new ForbiddenException(
+        'Missing webhook signature header (x-hub-signature-256)',
+      );
     }
 
     const signatureHash = signature.replace('sha256=', '');
@@ -410,7 +455,9 @@ export class WhatsAppService {
     );
 
     if (!isValid) {
-      this.logger.warn('Invalid webhook signature received — rejecting payload');
+      this.logger.warn(
+        'Invalid webhook signature received — rejecting payload',
+      );
       throw new ForbiddenException('Invalid webhook signature');
     }
 

@@ -45,13 +45,21 @@ export class AdminController {
   @ApiResponse({ status: 403, description: 'Requires SUPER_ADMIN role' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by name or slug' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Search by name or slug',
+  })
   async listTenants(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Query('search') search?: string,
   ) {
-    const { data, meta } = await this.adminService.listTenants(page, limit, search);
+    const { data, meta } = await this.adminService.listTenants(
+      page,
+      limit,
+      search,
+    );
     return { success: true, data, meta };
   }
 
@@ -72,7 +80,11 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTenantStatusDto,
   ) {
-    const data = await this.adminService.setTenantStatus(actorUserId, id, dto.isActive);
+    const data = await this.adminService.setTenantStatus(
+      actorUserId,
+      id,
+      dto.isActive,
+    );
     return { success: true, message: 'Tenant status updated.', data };
   }
 }

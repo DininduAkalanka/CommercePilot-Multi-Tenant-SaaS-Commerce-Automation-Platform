@@ -15,7 +15,7 @@ export class ProductsService {
 
   async createProduct(tenantId: string, dto: CreateProductDto) {
     const id = uuidv4();
-    
+
     const product = await this.prisma.product.create({
       data: {
         id,
@@ -46,9 +46,14 @@ export class ProductsService {
     });
 
     // Generate pgvector embedding for RAG asynchronously
-    this.productRetriever.generateAndStoreEmbedding(product.id, tenantId).catch(err => {
-      this.logger.error(`Failed to generate embedding for ${product.id}`, err);
-    });
+    this.productRetriever
+      .generateAndStoreEmbedding(product.id, tenantId)
+      .catch((err) => {
+        this.logger.error(
+          `Failed to generate embedding for ${product.id}`,
+          err,
+        );
+      });
 
     return product;
   }
@@ -68,7 +73,13 @@ export class ProductsService {
       }),
     ]);
 
-    return { products, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      products,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async getProduct(tenantId: string, id: string) {
@@ -115,9 +126,14 @@ export class ProductsService {
     });
 
     // Regenerate pgvector embedding for RAG asynchronously
-    this.productRetriever.generateAndStoreEmbedding(updated.id, tenantId).catch(err => {
-      this.logger.error(`Failed to generate embedding for ${updated.id}`, err);
-    });
+    this.productRetriever
+      .generateAndStoreEmbedding(updated.id, tenantId)
+      .catch((err) => {
+        this.logger.error(
+          `Failed to generate embedding for ${updated.id}`,
+          err,
+        );
+      });
 
     return updated;
   }

@@ -47,9 +47,17 @@ export class AuditLogsController {
   @ApiResponse({ status: 403, description: 'Requires OWNER role' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'entityType', required: false, description: 'e.g. Order, Product, User' })
+  @ApiQuery({
+    name: 'entityType',
+    required: false,
+    description: 'e.g. Order, Product, User',
+  })
   @ApiQuery({ name: 'entityId', required: false })
-  @ApiQuery({ name: 'action', required: false, description: 'e.g. ORDER_APPROVED' })
+  @ApiQuery({
+    name: 'action',
+    required: false,
+    description: 'e.g. ORDER_APPROVED',
+  })
   @ApiQuery({ name: 'actorUserId', required: false })
   async findAll(
     @CurrentUser('tenantId') tenantId: string,

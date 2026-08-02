@@ -1,5 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../common/database/prisma.service';
 import { WHATSAPP_ADAPTER } from './interfaces/whatsapp-adapter.interface';
 import type { IWhatsAppAdapter } from './interfaces/whatsapp-adapter.interface';
@@ -17,9 +18,11 @@ export class WhatsAppNotificationListener {
   @OnEvent('order.approved')
   async handleOrderApproved(payload: { tenantId: string; orderId: string }) {
     const { tenantId, orderId } = payload;
-    this.logger.log(`[${tenantId}] Sending WhatsApp confirmation for order ${orderId}`);
+    this.logger.log(
+      `[${tenantId}] Sending WhatsApp confirmation for order ${orderId}`,
+    );
 
-    const notificationId = require('uuid').v4();
+    const notificationId = uuidv4();
 
     try {
       const order = await this.prisma.order.findUnique({
@@ -33,7 +36,9 @@ export class WhatsAppNotificationListener {
       });
 
       if (!order || !order.customer) {
-        this.logger.error(`Order or customer not found for approval notification: ${orderId}`);
+        this.logger.error(
+          `Order or customer not found for approval notification: ${orderId}`,
+        );
         return;
       }
 
@@ -41,11 +46,11 @@ export class WhatsAppNotificationListener {
       const itemsSummary = order.items
         .map((i) => `- ${i.quantity}x ${i.product?.name ?? 'Item'}`)
         .join('\n');
-      
+
       const currency = 'LKR'; // Default currency
       const total = Number(order.totalAmount).toFixed(2);
-      const deliveryInfo = order.deliveryAddress 
-        ? `Deliver to ${order.deliveryAddress}` 
+      const deliveryInfo = order.deliveryAddress
+        ? `Deliver to ${order.deliveryAddress}`
         : 'Details will follow';
 
       // Template: confirmed
@@ -67,7 +72,7 @@ export class WhatsAppNotificationListener {
 
       // 2. Send via Adapter
       await this.whatsappAdapter.sendTextMessage(order.customer.phone, msg);
-      
+
       // 3. Update DB record to SENT
       await this.prisma.notification.update({
         where: { id: notificationId },
@@ -77,33 +82,49 @@ export class WhatsAppNotificationListener {
       // 4. Audit Log
       await this.prisma.auditLog.create({
         data: {
-          id: require('uuid').v4(),
+          id: uuidv4(),
           tenantId,
           actorType: 'SYSTEM',
           action: 'NOTIFICATION_SENT',
           entityType: 'Notification',
           entityId: notificationId,
-          afterState: { status: 'SENT', channel: 'WHATSAPP' } as object,
+          afterState: { status: 'SENT', channel: 'WHATSAPP' },
         },
       });
 
-      this.logger.log(`[${tenantId}] WhatsApp confirmation sent successfully for CP-${shortOrderId}`);
+      this.logger.log(
+        `[${tenantId}] WhatsApp confirmation sent successfully for CP-${shortOrderId}`,
+      );
     } catch (err: any) {
-      this.logger.error(`Failed to send WhatsApp confirmation for order ${orderId}: ${err.message}`);
-      
-      await this.prisma.notification.update({
-        where: { id: notificationId },
-        data: { status: 'FAILED', failedAt: new Date(), failReason: err.message },
-      }).catch(() => {}); // ignore if it wasn't created
+      this.logger.error(
+        `Failed to send WhatsApp confirmation for order ${orderId}: ${err.message}`,
+      );
+
+      await this.prisma.notification
+        .update({
+          where: { id: notificationId },
+          data: {
+            status: 'FAILED',
+            failedAt: new Date(),
+            failReason: err.message,
+          },
+        })
+        .catch(() => {}); // ignore if it wasn't created
     }
   }
 
   @OnEvent('order.rejected')
-  async handleOrderRejected(payload: { tenantId: string; draftId: string; reason: string }) {
+  async handleOrderRejected(payload: {
+    tenantId: string;
+    draftId: string;
+    reason: string;
+  }) {
     const { tenantId, draftId, reason } = payload;
-    this.logger.log(`[${tenantId}] Sending WhatsApp rejection for draft ${draftId}`);
+    this.logger.log(
+      `[${tenantId}] Sending WhatsApp rejection for draft ${draftId}`,
+    );
 
-    const notificationId = require('uuid').v4();
+    const notificationId = uuidv4();
 
     try {
       const draft = await this.prisma.aIDraftOrder.findUnique({
@@ -112,7 +133,9 @@ export class WhatsAppNotificationListener {
       });
 
       if (!draft || !draft.customer) {
-        this.logger.error(`Draft or customer not found for rejection notification: ${draftId}`);
+        this.logger.error(
+          `Draft or customer not found for rejection notification: ${draftId}`,
+        );
         return;
       }
 
@@ -135,7 +158,7 @@ export class WhatsAppNotificationListener {
 
       // 2. Send via Adapter
       await this.whatsappAdapter.sendTextMessage(draft.customer.phone, msg);
-      
+
       // 3. Update DB record to SENT
       await this.prisma.notification.update({
         where: { id: notificationId },
@@ -145,24 +168,34 @@ export class WhatsAppNotificationListener {
       // 4. Audit Log
       await this.prisma.auditLog.create({
         data: {
-          id: require('uuid').v4(),
+          id: uuidv4(),
           tenantId,
           actorType: 'SYSTEM',
           action: 'NOTIFICATION_SENT',
           entityType: 'Notification',
           entityId: notificationId,
-          afterState: { status: 'SENT', channel: 'WHATSAPP' } as object,
+          afterState: { status: 'SENT', channel: 'WHATSAPP' },
         },
       });
 
-      this.logger.log(`[${tenantId}] WhatsApp rejection sent successfully to customer ${draft.customer.phone}`);
+      this.logger.log(
+        `[${tenantId}] WhatsApp rejection sent successfully to customer ${draft.customer.phone}`,
+      );
     } catch (err: any) {
-      this.logger.error(`Failed to send WhatsApp rejection for draft ${draftId}: ${err.message}`);
-      
-      await this.prisma.notification.update({
-        where: { id: notificationId },
-        data: { status: 'FAILED', failedAt: new Date(), failReason: err.message },
-      }).catch(() => {});
+      this.logger.error(
+        `Failed to send WhatsApp rejection for draft ${draftId}: ${err.message}`,
+      );
+
+      await this.prisma.notification
+        .update({
+          where: { id: notificationId },
+          data: {
+            status: 'FAILED',
+            failedAt: new Date(),
+            failReason: err.message,
+          },
+        })
+        .catch(() => {});
     }
   }
 }

@@ -112,7 +112,9 @@ describe('AiEngineService', () => {
       });
 
       mockProductRetriever.retrieve.mockResolvedValue({
-        products: [{ id: 'prod-1', name: 'Rice', price: 500, stockQuantity: 10 }],
+        products: [
+          { id: 'prod-1', name: 'Rice', price: 500, stockQuantity: 10 },
+        ],
         catalogContext: '1. ID: prod-1\nName: Rice\nPrice: LKR 500',
       });
 
@@ -132,10 +134,10 @@ describe('AiEngineService', () => {
       });
 
       mockConfidenceScorer.score.mockResolvedValue({
-        composite: 0.90,
+        composite: 0.9,
         intent: 0.92,
         productMatch: 0.88,
-        completeness: 0.90,
+        completeness: 0.9,
         routing: 'manual_review',
         missingFields: [],
       });
@@ -174,19 +176,23 @@ describe('AiEngineService', () => {
       });
 
       mockProductRetriever.retrieve.mockResolvedValue({
-        products: [{ id: 'prod-1', name: 'Rice', price: 500, stockQuantity: 10 }],
+        products: [
+          { id: 'prod-1', name: 'Rice', price: 500, stockQuantity: 10 },
+        ],
         catalogContext: 'Rice details',
       });
 
       mockEntityExtractor.extract.mockResolvedValue({
-        items: [{
-          product_query: 'rice',
-          matched_product_id: 'prod-1',
-          matched_product_name: 'Rice',
-          match_confidence: 0.97,
-          quantity: 2,
-          selected_attributes: {},
-        }],
+        items: [
+          {
+            product_query: 'rice',
+            matched_product_id: 'prod-1',
+            matched_product_name: 'Rice',
+            match_confidence: 0.97,
+            quantity: 2,
+            selected_attributes: {},
+          },
+        ],
         delivery_info: {},
         missing_fields: [],
       });

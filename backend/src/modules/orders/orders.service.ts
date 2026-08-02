@@ -14,8 +14,9 @@ import {
   OrderStatus,
   AIDraftStatus,
   OrderSource,
-  InventoryTxType,
+  Prisma,
 } from '@prisma/client';
+import type { CorrectedDataDto } from './dto/correct-draft.dto';
 
 /**
  * OrdersService
@@ -36,7 +37,11 @@ export class OrdersService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  private readonly sse$ = new Subject<{ tenantId: string; type: string; data: any }>();
+  private readonly sse$ = new Subject<{
+    tenantId: string;
+    type: string;
+    data: any;
+  }>();
 
   /**
    * Get Server-Sent Events stream for a specific tenant.
@@ -47,7 +52,7 @@ export class OrdersService {
       filter((event) => event.tenantId === tenantId),
       map((event) => ({
         data: JSON.stringify({ type: event.type, payload: event.data }),
-      } as MessageEvent)),
+      })),
     );
   }
 
@@ -74,10 +79,14 @@ export class OrdersService {
       });
       if (draft) {
         this.emitSse(tenantId, 'DRAFT_CREATED', draft);
-        this.logger.log(`[${tenantId}] Broadcasted DRAFT_CREATED SSE event for ${draftId}`);
+        this.logger.log(
+          `[${tenantId}] Broadcasted DRAFT_CREATED SSE event for ${draftId}`,
+        );
       }
     } catch (err: any) {
-      this.logger.error(`Failed to broadcast draft created SSE: ${err.message}`);
+      this.logger.error(
+        `Failed to broadcast draft created SSE: ${err.message}`,
+      );
     }
   }
 
@@ -161,7 +170,9 @@ export class OrdersService {
     });
 
     if (!draft) {
-      throw new NotFoundException(`Draft order ${draftId} not found or already reviewed`);
+      throw new NotFoundException(
+        `Draft order ${draftId} not found or already reviewed`,
+      );
     }
 
     // Validate stock for all items
@@ -259,7 +270,9 @@ export class OrdersService {
       return order;
     });
 
-    this.logger.log(`[${tenantId}] Order approved: ${order.orderNumber} (${orderId})`);
+    this.logger.log(
+      `[${tenantId}] Order approved: ${order.orderNumber} (${orderId})`,
+    );
 
     // Emit event so IntegrationsModule can sync to WooCommerce
     this.eventEmitter.emit('order.approved', { tenantId, orderId });
@@ -285,7 +298,9 @@ export class OrdersService {
     });
 
     if (!draft) {
-      throw new NotFoundException(`Draft order ${draftId} not found or already reviewed`);
+      throw new NotFoundException(
+        `Draft order ${draftId} not found or already reviewed`,
+      );
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -352,31 +367,27 @@ export class OrdersService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [
-      totalOrders,
-      pendingApproval,
-      approvedToday,
-      rejectedToday,
-    ] = await Promise.all([
-      this.prisma.order.count({ where: { tenantId, deletedAt: null } }),
-      this.prisma.aIDraftOrder.count({
-        where: { tenantId, status: AIDraftStatus.PENDING },
-      }),
-      this.prisma.order.count({
-        where: {
-          tenantId,
-          status: { in: [OrderStatus.APPROVED, OrderStatus.SYNCED] },
-          createdAt: { gte: today },
-        },
-      }),
-      this.prisma.aIDraftOrder.count({
-        where: {
-          tenantId,
-          status: AIDraftStatus.REJECTED,
-          createdAt: { gte: today },
-        },
-      }),
-    ]);
+    const [totalOrders, pendingApproval, approvedToday, rejectedToday] =
+      await Promise.all([
+        this.prisma.order.count({ where: { tenantId, deletedAt: null } }),
+        this.prisma.aIDraftOrder.count({
+          where: { tenantId, status: AIDraftStatus.PENDING },
+        }),
+        this.prisma.order.count({
+          where: {
+            tenantId,
+            status: { in: [OrderStatus.APPROVED, OrderStatus.SYNCED] },
+            createdAt: { gte: today },
+          },
+        }),
+        this.prisma.aIDraftOrder.count({
+          where: {
+            tenantId,
+            status: AIDraftStatus.REJECTED,
+            createdAt: { gte: today },
+          },
+        }),
+      ]);
 
     return { totalOrders, pendingApproval, approvedToday, rejectedToday };
   }
@@ -393,9 +404,12 @@ export class OrdersService {
 
     return logs.map((log) => {
       let text = `Action: ${log.action}`;
-      if (log.action === 'ORDER_APPROVED') text = `Order approved (${log.entityId})`;
-      else if (log.action === 'ORDER_REJECTED') text = `Order rejected (${log.entityId})`;
-      else if (log.action === 'AI_CORRECTION_RECORDED') text = `AI Draft corrected by human`;
+      if (log.action === 'ORDER_APPROVED')
+        text = `Order approved (${log.entityId})`;
+      else if (log.action === 'ORDER_REJECTED')
+        text = `Order rejected (${log.entityId})`;
+      else if (log.action === 'AI_CORRECTION_RECORDED')
+        text = `AI Draft corrected by human`;
 
       return {
         id: log.id,
@@ -423,11 +437,7 @@ export class OrdersService {
     thirtyDaysAgo.setHours(0, 0, 0, 0);
 
     // Fetch all required data in parallel
-    const [
-      ordersLast30Days,
-      allOrders,
-      allDrafts,
-    ] = await Promise.all([
+    const [ordersLast30Days, allOrders, allDrafts] = await Promise.all([
       // All orders in last 30 days with createdAt for grouping
       this.prisma.order.findMany({
         where: { tenantId, deletedAt: null, createdAt: { gte: thirtyDaysAgo } },
@@ -468,20 +478,25 @@ export class OrdersService {
     }));
 
     // Status breakdown
-    const statusBreakdown = Object.values(OrderStatus).reduce<Record<string, number>>(
-      (acc, status) => {
-        acc[status] = 0;
-        return acc;
-      },
-      {},
-    );
+    const statusBreakdown = Object.values(OrderStatus).reduce<
+      Record<string, number>
+    >((acc, status) => {
+      acc[status] = 0;
+      return acc;
+    }, {});
     for (const order of allOrders) {
       statusBreakdown[order.status] = (statusBreakdown[order.status] ?? 0) + 1;
     }
 
     const totalRevenue = allOrders
       .filter((o) =>
-        ([OrderStatus.APPROVED, OrderStatus.SYNCED, OrderStatus.CANCELLED] as OrderStatus[]).includes(o.status),
+        (
+          [
+            OrderStatus.APPROVED,
+            OrderStatus.SYNCED,
+            OrderStatus.CANCELLED,
+          ] as OrderStatus[]
+        ).includes(o.status),
       )
       .reduce((sum, o) => sum + Number(o.totalAmount), 0);
 
@@ -489,7 +504,8 @@ export class OrdersService {
     const confidenceValues = allDrafts.map((d) => d.overallConfidence);
     const aiConfidenceAvg =
       confidenceValues.length > 0
-        ? confidenceValues.reduce((sum, c) => sum + c, 0) / confidenceValues.length
+        ? confidenceValues.reduce((sum, c) => sum + c, 0) /
+          confidenceValues.length
         : 0;
 
     // Approval rate
@@ -498,7 +514,9 @@ export class OrdersService {
     );
     const approvedDrafts = allDrafts.filter((d) => d.status === 'APPROVED');
     const approvalRate =
-      reviewedDrafts.length > 0 ? approvedDrafts.length / reviewedDrafts.length : 0;
+      reviewedDrafts.length > 0
+        ? approvedDrafts.length / reviewedDrafts.length
+        : 0;
 
     return {
       dailyOrders,
@@ -571,7 +589,7 @@ export class OrdersService {
   async saveDraftCorrections(
     tenantId: string,
     draftId: string,
-    correctedData: Record<string, unknown>,
+    correctedData: CorrectedDataDto,
     userId: string,
   ): Promise<void> {
     const draft = await this.prisma.aIDraftOrder.findFirst({
@@ -582,7 +600,10 @@ export class OrdersService {
       throw new NotFoundException(`Draft order not found: ${draftId}`);
     }
 
-    if (draft.status !== AIDraftStatus.PENDING && draft.status !== AIDraftStatus.REVIEWED) {
+    if (
+      draft.status !== AIDraftStatus.PENDING &&
+      draft.status !== AIDraftStatus.REVIEWED
+    ) {
       throw new BadRequestException(
         `Cannot correct a draft in status: ${draft.status}. Only PENDING or REVIEWED drafts can be corrected.`,
       );
@@ -590,7 +611,10 @@ export class OrdersService {
 
     // Build correction diff: compare original AI extraction vs. owner's corrections
     const originalData = draft.structuredData as Record<string, unknown>;
-    const fieldsCorrected = this.computeCorrectedFields(originalData, correctedData);
+    const fieldsCorrected = this.computeCorrectedFields(
+      originalData,
+      correctedData as unknown as Record<string, unknown>,
+    );
 
     const corrections = {
       originalAiExtraction: originalData,
@@ -613,16 +637,27 @@ export class OrdersService {
       });
 
       // 2. Create new draft items
-      const itemsList = (correctedData.items as any[]) || [];
+      const itemsList = correctedData.items ?? [];
       for (const item of itemsList) {
-        const productId = item.matched_product_id || item.productId || null;
-        let unitPrice = item.unitPrice || item.unit_price || null;
+        const productId = item.matched_product_id ?? null;
+        let unitPrice: Prisma.Decimal | number | null = item.unitPrice ?? null;
 
-        if (productId && !unitPrice) {
-          const product = await tx.product.findUnique({
-            where: { id: productId },
+        if (productId) {
+          // Tenant-scoped on purpose. `productId` comes straight from the
+          // request body, so an unscoped findUnique here let any authenticated
+          // owner read another tenant's catalog by guessing a product id — and
+          // copy that tenant's price onto their own draft.
+          const product = await tx.product.findFirst({
+            where: { id: productId, tenantId, deletedAt: null },
           });
-          if (product) {
+
+          if (!product) {
+            throw new BadRequestException(
+              `Product not found in this catalog: ${productId}`,
+            );
+          }
+
+          if (!unitPrice) {
             unitPrice = product.price;
           }
         }
@@ -633,12 +668,17 @@ export class OrdersService {
             tenantId,
             draftOrderId: draftId,
             productId,
-            productQuery: item.product_query || item.productQuery || '',
-            matchedProductName: item.matched_product_name || item.matchedProductName || null,
-            matchConfidence: item.match_confidence || item.matchConfidence || 1.0,
-            quantity: item.quantity ?? 1,
+            // The camelCase fallbacks that used to sit here are gone: the DTO
+            // now fixes the wire format as snake_case (what both the dashboard
+            // and the AI extractor send), and forbidNonWhitelisted would
+            // reject a camelCase payload before it ever reached this point.
+            productQuery: item.product_query ?? '',
+            matchedProductName: item.matched_product_name ?? null,
+            matchConfidence: item.match_confidence ?? 1.0,
+            quantity: item.quantity,
             unitPrice: unitPrice,
-            selectedAttributes: (item.selected_attributes || item.selectedAttributes || {}) as object,
+            selectedAttributes: (item.selected_attributes ??
+              {}) as Prisma.InputJsonValue,
           },
         });
       }
@@ -647,11 +687,12 @@ export class OrdersService {
       await tx.aIDraftOrder.update({
         where: { id: draftId },
         data: {
-          humanCorrections: corrections as object,
+          humanCorrections: corrections as unknown as Prisma.InputJsonValue,
           correctedByUserId: userId,
           correctedAt: new Date(),
           status: AIDraftStatus.REVIEWED,
-          structuredData: correctedData as object, // Update working copy
+          // Update working copy
+          structuredData: correctedData as unknown as Prisma.InputJsonValue,
         },
       });
 
@@ -665,8 +706,13 @@ export class OrdersService {
           action: 'AI_CORRECTION_RECORDED',
           entityType: 'AIDraftOrder',
           entityId: draftId,
-          beforeState: { structuredData: originalData } as object,
-          afterState: { structuredData: correctedData, fieldsCorrected } as object,
+          beforeState: {
+            structuredData: originalData,
+          } as unknown as Prisma.InputJsonValue,
+          afterState: {
+            structuredData: correctedData,
+            fieldsCorrected,
+          } as unknown as Prisma.InputJsonValue,
         },
       });
     });
@@ -693,7 +739,10 @@ export class OrdersService {
     };
 
     // Top-level keys
-    const allKeys = new Set([...Object.keys(original), ...Object.keys(corrected)]);
+    const allKeys = new Set([
+      ...Object.keys(original),
+      ...Object.keys(corrected),
+    ]);
     for (const key of allKeys) {
       compare(original[key], corrected[key], key);
     }
@@ -707,13 +756,16 @@ export class OrdersService {
    */
   @OnEvent('draft.auto_approve')
   async handleAutoApproveEvent(payload: { tenantId: string; draftId: string }) {
-    this.logger.log(`[${payload.tenantId}] Auto-approving draft order ${payload.draftId}`);
+    this.logger.log(
+      `[${payload.tenantId}] Auto-approving draft order ${payload.draftId}`,
+    );
     try {
       // We use 'SYSTEM' as the reviewerUserId to indicate AI auto-approval
       await this.approveDraft(payload.tenantId, payload.draftId, 'SYSTEM');
     } catch (error) {
-      this.logger.error(`[${payload.tenantId}] Auto-approve failed for draft ${payload.draftId}: ${error.message}`);
+      this.logger.error(
+        `[${payload.tenantId}] Auto-approve failed for draft ${payload.draftId}: ${error.message}`,
+      );
     }
   }
 }
-

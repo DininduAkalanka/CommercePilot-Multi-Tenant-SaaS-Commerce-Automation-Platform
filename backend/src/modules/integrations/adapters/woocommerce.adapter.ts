@@ -80,7 +80,11 @@ export class WooCommerceAdapter implements IEcommerceAdapter {
       return client;
     }
 
-    if (!tenant.woocommerceUrl || !tenant.woocommerceKey || !tenant.woocommerceSecret) {
+    if (
+      !tenant.woocommerceUrl ||
+      !tenant.woocommerceKey ||
+      !tenant.woocommerceSecret
+    ) {
       throw new Error(`WooCommerce credentials missing for tenant ${tenantId}`);
     }
 
@@ -89,8 +93,9 @@ export class WooCommerceAdapter implements IEcommerceAdapter {
     const consumerSecret = this.encryption.decrypt(tenant.woocommerceSecret);
 
     // The library ships as both default and named export depending on version/bundler.
-    const ApiClass = (WooCommerceRestApi as unknown as { default?: typeof WooCommerceRestApi })
-      .default ?? WooCommerceRestApi;
+    const ApiClass =
+      (WooCommerceRestApi as unknown as { default?: typeof WooCommerceRestApi })
+        .default ?? WooCommerceRestApi;
     const api = new ApiClass({
       url: tenant.woocommerceUrl,
       consumerKey,
@@ -145,7 +150,10 @@ export class WooCommerceAdapter implements IEcommerceAdapter {
       this.logger.log(`[MOCK] Creating order ${payload.orderNumber}`);
       // Deterministic mock id derived from the idempotency key so repeated
       // mock calls for the same order return the same external id.
-      return { success: true, externalOrderId: `mock_wc_${payload.idempotencyKey}` };
+      return {
+        success: true,
+        externalOrderId: `mock_wc_${payload.idempotencyKey}`,
+      };
     }
     if (!woo.api) {
       throw new Error('WooCommerce client not initialized');
@@ -169,7 +177,10 @@ export class WooCommerceAdapter implements IEcommerceAdapter {
         // Persist the idempotency key on the order so the same CommercePilot
         // order is never duplicated in WooCommerce across retries.
         meta_data: [
-          { key: '_commercepilot_idempotency_key', value: payload.idempotencyKey },
+          {
+            key: '_commercepilot_idempotency_key',
+            value: payload.idempotencyKey,
+          },
           { key: '_commercepilot_order_number', value: payload.orderNumber },
         ],
       };
@@ -177,7 +188,9 @@ export class WooCommerceAdapter implements IEcommerceAdapter {
       const response = await woo.api.post('orders', data);
       const order = response.data as WooOrderResponse;
 
-      this.logger.log(`[${woo.tenantId}] WooCommerce order created: ${order.id}`);
+      this.logger.log(
+        `[${woo.tenantId}] WooCommerce order created: ${order.id}`,
+      );
       return { success: true, externalOrderId: String(order.id) };
     } catch (error) {
       this.logger.error(

@@ -5,7 +5,7 @@ import {
   STOCK_CONFLICT_RESOLUTION_PROMPT,
   PROMPT_VERSION_V2,
 } from '../prompts/system.prompts';
-import { AIProcessingStage } from '@prisma/client';
+import { AIProcessingStage, Prisma } from '@prisma/client';
 
 export interface StockConflict {
   productId: string;
@@ -59,7 +59,9 @@ export class ConflictResolverService {
     const startTime = Date.now();
 
     // Filter to items that have a matched product
-    const itemsWithProducts = draftItems.filter((item) => item.productId !== null);
+    const itemsWithProducts = draftItems.filter(
+      (item) => item.productId !== null,
+    );
 
     if (itemsWithProducts.length === 0) {
       return { hasConflicts: false, conflicts: [], suggestedMessage: null };
@@ -109,9 +111,10 @@ export class ConflictResolverService {
       { temperature: 0.3, maxOutputTokens: 256 },
     );
 
-    const suggestedMessage = response.success && response.text
-      ? response.text.trim()
-      : `Sorry, some items in your order are out of stock. Our team will contact you shortly to resolve this. 🙏`;
+    const suggestedMessage =
+      response.success && response.text
+        ? response.text.trim()
+        : `Sorry, some items in your order are out of stock. Our team will contact you shortly to resolve this. 🙏`;
 
     const processingTimeMs = Date.now() - startTime;
 
@@ -121,7 +124,7 @@ export class ConflictResolverService {
         tenantId,
         messageId,
         stage: AIProcessingStage.CONFLICT_RESOLUTION,
-        inputData: { conflicts } as object,
+        inputData: { conflicts } as unknown as Prisma.InputJsonValue,
         outputData: { suggestedMessage },
         modelUsed: response.modelUsed ?? 'gemini-1.5-flash',
         promptVersion: PROMPT_VERSION_V2,

@@ -19,7 +19,8 @@ describe('TenantSettingsService', () => {
   // Real EncryptionService with a deterministic test key so we can assert
   // that credentials are actually encrypted (not merely mocked away).
   const configService = {
-    get: (name: string) => (name === 'ENCRYPTION_KEY' ? 'f'.repeat(64) : undefined),
+    get: (name: string) =>
+      name === 'ENCRYPTION_KEY' ? 'f'.repeat(64) : undefined,
   } as unknown as ConfigService;
 
   beforeEach(async () => {
@@ -75,9 +76,9 @@ describe('TenantSettingsService', () => {
     it('should throw NotFoundException for unknown tenant', async () => {
       mockPrisma.tenant.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.getSettings('nonexistent-tenant'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getSettings('nonexistent-tenant')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -94,7 +95,7 @@ describe('TenantSettingsService', () => {
         whatsappProvider: 'MOCK',
         woocommerceUrl: null,
         woocommerceProvider: 'MOCK',
-        aiConfidenceThreshold: 0.90,
+        aiConfidenceThreshold: 0.9,
         autoApproveEnabled: true,
         autoApproveThreshold: 0.95,
         businessHours: null,
@@ -105,12 +106,12 @@ describe('TenantSettingsService', () => {
 
       const result = await service.updateSettings('tenant-1', {
         name: 'New Name',
-        aiConfidenceThreshold: 0.90,
+        aiConfidenceThreshold: 0.9,
         autoApproveEnabled: true,
       });
 
       expect(result.name).toBe('New Name');
-      expect(result.aiConfidenceThreshold).toBe(0.90);
+      expect(result.aiConfidenceThreshold).toBe(0.9);
       expect(result.autoApproveEnabled).toBe(true);
     });
 

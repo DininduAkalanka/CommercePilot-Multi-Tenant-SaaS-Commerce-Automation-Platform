@@ -5,7 +5,12 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { ProductSyncService } from './services/product-sync.service';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 
 @ApiTags('Integrations')
 @ApiBearerAuth()
@@ -19,8 +24,14 @@ export class IntegrationsController {
    */
   @Post('woocommerce/sync')
   @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.STAFF) // Allow staff to trigger sync
-  @ApiOperation({ summary: 'Trigger a manual product sync from the configured provider (e.g., WooCommerce)' })
-  @ApiResponse({ status: 201, description: 'Sync started/completed successfully' })
+  @ApiOperation({
+    summary:
+      'Trigger a manual product sync from the configured provider (e.g., WooCommerce)',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Sync started/completed successfully',
+  })
   async syncProducts(@Req() req: any) {
     const tenantId = req.user.tenantId;
     return this.productSyncService.syncProducts(tenantId);

@@ -27,7 +27,11 @@ describe('OrderSyncService', () => {
 
   const initialize = jest.fn();
   const createOrder = jest.fn();
-  const adapter = { initialize, getProducts: jest.fn(), createOrder } as IEcommerceAdapter;
+  const adapter = {
+    initialize,
+    getProducts: jest.fn(),
+    createOrder,
+  } as IEcommerceAdapter;
 
   let service: OrderSyncService;
 
@@ -44,7 +48,13 @@ describe('OrderSyncService', () => {
     customerId: 'cust-1',
     customer: { name: 'Nimal', phone: '+94771234567' },
     items: [
-      { id: 'i1', productId: 'p1', quantity: 2, unitPrice: 1500, product: { woocommerceId: '10' } },
+      {
+        id: 'i1',
+        productId: 'p1',
+        quantity: 2,
+        unitPrice: 1500,
+        product: { woocommerceId: '10' },
+      },
     ],
   };
 
@@ -60,7 +70,10 @@ describe('OrderSyncService', () => {
     initialize.mockResolvedValue(mockClient);
     createOrder.mockResolvedValue({ success: true, externalOrderId: 'wc_555' });
 
-    await service.handleOrderApproved({ tenantId: 'tenant-1', orderId: 'order-1' });
+    await service.handleOrderApproved({
+      tenantId: 'tenant-1',
+      orderId: 'order-1',
+    });
 
     // External id + syncedAt persisted with SYNCED status
     expect(tx.order.update).toHaveBeenCalledWith(
@@ -93,7 +106,9 @@ describe('OrderSyncService', () => {
       }),
     );
     expect(tx.auditLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ action: 'ORDER_SYNCED' }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ action: 'ORDER_SYNCED' }),
+      }),
     );
   });
 
@@ -104,7 +119,10 @@ describe('OrderSyncService', () => {
       woocommerceOrderId: 'wc_555',
     });
 
-    await service.handleOrderApproved({ tenantId: 'tenant-1', orderId: 'order-1' });
+    await service.handleOrderApproved({
+      tenantId: 'tenant-1',
+      orderId: 'order-1',
+    });
 
     expect(initialize).not.toHaveBeenCalled();
     expect(createOrder).not.toHaveBeenCalled();
@@ -115,9 +133,15 @@ describe('OrderSyncService', () => {
   it('marks the order FAILED and notifies the owner when sync fails', async () => {
     orderFindFirst.mockResolvedValue(approvedOrder);
     initialize.mockResolvedValue(mockClient);
-    createOrder.mockResolvedValue({ success: false, error: 'store unreachable' });
+    createOrder.mockResolvedValue({
+      success: false,
+      error: 'store unreachable',
+    });
 
-    await service.handleOrderApproved({ tenantId: 'tenant-1', orderId: 'order-1' });
+    await service.handleOrderApproved({
+      tenantId: 'tenant-1',
+      orderId: 'order-1',
+    });
 
     expect(tx.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: 'FAILED' } }),
@@ -134,11 +158,22 @@ describe('OrderSyncService', () => {
   it('rejects real-provider sync when a product has no external mapping', async () => {
     orderFindFirst.mockResolvedValue({
       ...approvedOrder,
-      items: [{ id: 'i1', productId: 'p1', quantity: 1, unitPrice: 1500, product: { woocommerceId: null } }],
+      items: [
+        {
+          id: 'i1',
+          productId: 'p1',
+          quantity: 1,
+          unitPrice: 1500,
+          product: { woocommerceId: null },
+        },
+      ],
     });
     initialize.mockResolvedValue({ tenantId: 'tenant-1', isMock: false });
 
-    await service.handleOrderApproved({ tenantId: 'tenant-1', orderId: 'order-1' });
+    await service.handleOrderApproved({
+      tenantId: 'tenant-1',
+      orderId: 'order-1',
+    });
 
     // Should not attempt to create an order; should mark FAILED.
     expect(createOrder).not.toHaveBeenCalled();

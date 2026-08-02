@@ -26,7 +26,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     const correlationId = (request as any).correlationId ?? 'unknown';
 
-    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    // Typed as `number`, not `HttpStatus`: `getStatus()` may return a code
+    // outside the enum, and the `>= 500` severity check below compares against
+    // a plain number.
+    let status: number = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
     let errors: string[] | undefined;
 

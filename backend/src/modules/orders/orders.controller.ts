@@ -22,10 +22,19 @@ import { CorrectDraftDto } from './dto/correct-draft.dto';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { UserRole, OrderStatus } from '@prisma/client';
 import { IsOptional, IsString } from 'class-validator';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiProperty } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiProperty,
+} from '@nestjs/swagger';
 
 class ApproveOrderDto {
-  @ApiProperty({ description: 'Optional notes for the approval', required: false })
+  @ApiProperty({
+    description: 'Optional notes for the approval',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   notes?: string;
@@ -76,7 +85,11 @@ export class OrdersController {
   /** Analytics data for charts — daily orders, status breakdown, AI metrics */
   @Get('analytics')
   @ApiOperation({ summary: 'Get analytics data for charts (30-day window)' })
-  @ApiResponse({ status: 200, description: 'Analytics data including daily order volume, status breakdown, and AI metrics' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Analytics data including daily order volume, status breakdown, and AI metrics',
+  })
   async getAnalytics(@CurrentTenant() tenantId: string) {
     const data = await this.ordersService.getAnalytics(tenantId);
     return { success: true, data };
@@ -93,10 +106,7 @@ export class OrdersController {
   /** Get a specific draft with AI processing logs */
   @Get('drafts/:id')
   @ApiOperation({ summary: 'Get a specific draft with AI processing logs' })
-  async getDraft(
-    @CurrentTenant() tenantId: string,
-    @Param('id') id: string,
-  ) {
+  async getDraft(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     const result = await this.ordersService.getDraftById(tenantId, id);
     return { success: true, data: result };
   }
@@ -183,7 +193,9 @@ export class OrdersController {
       dto.correctedData,
       user.sub,
     );
-    return { success: true, message: 'Corrections saved. Draft is ready for approval.' };
+    return {
+      success: true,
+      message: 'Corrections saved. Draft is ready for approval.',
+    };
   }
 }
-

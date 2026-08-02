@@ -18,7 +18,9 @@ const TENANT_ADMIN_SELECT = {
   createdAt: true,
   updatedAt: true,
   deletedAt: true,
-  _count: { select: { users: true, orders: true, customers: true, products: true } },
+  _count: {
+    select: { users: true, orders: true, customers: true, products: true },
+  },
 } satisfies Prisma.TenantSelect;
 
 /**
@@ -67,7 +69,11 @@ export class AdminService {
   }
 
   /** Activate or suspend a tenant platform-wide. Audit-logged against the target tenant. */
-  async setTenantStatus(actorUserId: string, tenantId: string, isActive: boolean) {
+  async setTenantStatus(
+    actorUserId: string,
+    tenantId: string,
+    isActive: boolean,
+  ) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { id: true, isActive: true, name: true },
@@ -101,13 +107,17 @@ export class AdminService {
 
   /** Platform-wide aggregate metrics. */
   async platformStats() {
-    const [tenants, activeTenants, users, orders, products] = await Promise.all([
-      this.prisma.tenant.count(),
-      this.prisma.tenant.count({ where: { isActive: true, deletedAt: null } }),
-      this.prisma.user.count({ where: { deletedAt: null } }),
-      this.prisma.order.count({ where: { deletedAt: null } }),
-      this.prisma.product.count({ where: { deletedAt: null } }),
-    ]);
+    const [tenants, activeTenants, users, orders, products] = await Promise.all(
+      [
+        this.prisma.tenant.count(),
+        this.prisma.tenant.count({
+          where: { isActive: true, deletedAt: null },
+        }),
+        this.prisma.user.count({ where: { deletedAt: null } }),
+        this.prisma.order.count({ where: { deletedAt: null } }),
+        this.prisma.product.count({ where: { deletedAt: null } }),
+      ],
+    );
 
     return { tenants, activeTenants, users, orders, products };
   }

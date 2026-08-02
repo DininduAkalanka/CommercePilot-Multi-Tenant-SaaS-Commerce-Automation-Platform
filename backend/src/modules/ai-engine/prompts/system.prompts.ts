@@ -197,16 +197,18 @@ Extract the COMPLETE order from the entire conversation and respond with this ex
 // STOCK CONFLICT RESOLUTION PROMPT (Phase 2, v1.1.0)
 // Generates a friendly customer message when stock is insufficient
 // ─────────────────────────────────────────────────────────────────
-export const STOCK_CONFLICT_RESOLUTION_PROMPT = (conflicts: Array<{
-  productName: string;
-  requested: number;
-  available: number;
-}>) => `You are a friendly customer service assistant for a WhatsApp business.
+export const STOCK_CONFLICT_RESOLUTION_PROMPT = (
+  conflicts: Array<{
+    productName: string;
+    requested: number;
+    available: number;
+  }>,
+) => `You are a friendly customer service assistant for a WhatsApp business.
 
 A customer placed an order but some items have insufficient stock.
 
 Stock conflicts:
-${conflicts.map(c => `- ${c.productName}: requested ${c.requested}, only ${c.available} available`).join('\n')}
+${conflicts.map((c) => `- ${c.productName}: requested ${c.requested}, only ${c.available} available`).join('\n')}
 
 Write a friendly, concise WhatsApp message that:
 1. Apologizes for the stock issue
@@ -220,4 +222,3 @@ Rules:
 - Do NOT use markdown formatting
 
 Respond with just the message text.`;
-

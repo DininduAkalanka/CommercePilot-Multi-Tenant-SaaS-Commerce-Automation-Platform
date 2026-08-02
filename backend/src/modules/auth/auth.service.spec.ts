@@ -7,7 +7,6 @@ import * as bcrypt from 'bcryptjs';
 
 describe('AuthService', () => {
   let service: AuthService;
-  let prisma: PrismaService;
 
   const mockPrismaService = {
     user: {
@@ -44,7 +43,6 @@ describe('AuthService', () => {
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    prisma = module.get<PrismaService>(PrismaService);
   });
 
   afterEach(() => {
@@ -76,9 +74,15 @@ describe('AuthService', () => {
       };
 
       mockPrismaService.user.findFirst.mockResolvedValue(mockUser);
-      mockPrismaService.user.update.mockResolvedValue({ ...mockUser, lastLogin: new Date() });
+      mockPrismaService.user.update.mockResolvedValue({
+        ...mockUser,
+        lastLogin: new Date(),
+      });
 
-      const result = await service.login({ email: 'test@example.com', password: 'password123' });
+      const result = await service.login({
+        email: 'test@example.com',
+        password: 'password123',
+      });
 
       expect(result.accessToken).toBe('test-token');
       expect(result.user).toEqual({

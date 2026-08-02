@@ -9,7 +9,12 @@ import {
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 
 @ApiTags('Notifications')
 @ApiBearerAuth()
@@ -38,15 +43,32 @@ export class NotificationsController {
     };
   }
 
+  /**
+   * NOT YET IMPLEMENTED — accepted but not persisted.
+   *
+   * The `Notification` model has no read-receipt column: `NotificationStatus`
+   * tracks *delivery* (PENDING/SENT/DELIVERED/FAILED), not whether the owner
+   * has read the item. Persisting this requires a `readAt DateTime?` column
+   * and a migration, which is deliberately out of scope here.
+   *
+   * The route is kept so the dashboard's optimistic UI keeps working, but the
+   * response no longer claims the write succeeded — callers can branch on
+   * `persisted` instead of being told `success: true` for a no-op.
+   */
   @Patch(':id/read')
-  @ApiOperation({ summary: 'Mark a notification as read' })
-  @ApiResponse({ status: 200, description: 'Notification marked as read' })
-  async markAsRead(
-    @CurrentTenant() tenantId: string,
-    @Param('id') id: string,
-  ) {
-    // This is optional if we add a 'read' column later, but for now we might not have it.
-    // If not, we can remove this or return a stub.
-    return { success: true };
+  @ApiOperation({
+    summary: 'Mark a notification as read (accepted, not yet persisted)',
+  })
+  @ApiResponse({ status: 200, description: 'Request accepted; not persisted' })
+  markAsRead(
+    @CurrentTenant() _tenantId: string,
+    @Param('id') _id: string,
+  ): { success: boolean; persisted: boolean; message: string } {
+    return {
+      success: true,
+      persisted: false,
+      message:
+        'Read state is not persisted yet — pending a readAt column on Notification.',
+    };
   }
 }
