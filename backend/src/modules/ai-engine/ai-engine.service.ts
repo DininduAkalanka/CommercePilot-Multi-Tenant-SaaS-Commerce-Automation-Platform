@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../common/database/prisma.service';
-import { GeminiAdapter } from './adapters/gemini.adapter';
+import { AI_ADAPTER } from './adapters/ai-adapter.interface';
+import type { AiAdapter } from './adapters/ai-adapter.interface';
 import { IntentDetectorService } from './pipeline/intent-detector.service';
 import { ProductRetrieverService } from './pipeline/product-retriever.service';
 import { EntityExtractorService } from './pipeline/entity-extractor.service';
@@ -68,7 +69,7 @@ export class AiEngineService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gemini: GeminiAdapter,
+    @Inject(AI_ADAPTER) private readonly ai: AiAdapter,
     private readonly intentDetector: IntentDetectorService,
     private readonly productRetriever: ProductRetrieverService,
     private readonly entityExtractor: EntityExtractorService,

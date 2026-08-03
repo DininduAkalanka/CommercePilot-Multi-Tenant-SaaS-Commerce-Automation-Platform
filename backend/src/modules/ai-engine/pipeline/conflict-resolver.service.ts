@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
-import { GeminiAdapter } from '../adapters/gemini.adapter';
+import { AI_ADAPTER } from '../adapters/ai-adapter.interface';
+import type { AiAdapter } from '../adapters/ai-adapter.interface';
 import {
   STOCK_CONFLICT_RESOLUTION_PROMPT,
   PROMPT_VERSION_V2,
@@ -40,7 +41,7 @@ export class ConflictResolverService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gemini: GeminiAdapter,
+    @Inject(AI_ADAPTER) private readonly ai: AiAdapter,
   ) {}
 
   /**
@@ -105,7 +106,7 @@ export class ConflictResolverService {
 
     // Generate customer-friendly resolution message via Gemini
     const prompt = STOCK_CONFLICT_RESOLUTION_PROMPT(conflicts);
-    const response = await this.gemini.generateText(
+    const response = await this.ai.generateText(
       'You are a helpful customer service assistant.',
       prompt,
       { temperature: 0.3, maxOutputTokens: 256 },

@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
-import { GeminiAdapter } from '../adapters/gemini.adapter';
+import { AI_ADAPTER } from '../adapters/ai-adapter.interface';
+import type { AiAdapter } from '../adapters/ai-adapter.interface';
 import { AIProcessingStage } from '@prisma/client';
 
 export interface RetrievedProduct {
@@ -40,7 +41,7 @@ export class ProductRetrieverService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gemini: GeminiAdapter,
+    @Inject(AI_ADAPTER) private readonly ai: AiAdapter,
   ) {}
 
   /**
@@ -136,7 +137,7 @@ export class ProductRetrieverService {
       .join(' | ');
 
     try {
-      const embedding = await this.gemini.generateEmbedding(textToEmbed);
+      const embedding = await this.ai.generateEmbedding(textToEmbed);
 
       if (embedding === null) {
         // No embedding available (no API key, or the call failed). Leave the
@@ -173,7 +174,7 @@ export class ProductRetrieverService {
     tenantId: string,
     query: string,
   ): Promise<RetrievedProduct[]> {
-    const queryEmbedding = await this.gemini.generateEmbedding(query);
+    const queryEmbedding = await this.ai.generateEmbedding(query);
 
     // No embedding for the query means no meaningful vector comparison is
     // possible. Return empty so retrieve() falls through to text search

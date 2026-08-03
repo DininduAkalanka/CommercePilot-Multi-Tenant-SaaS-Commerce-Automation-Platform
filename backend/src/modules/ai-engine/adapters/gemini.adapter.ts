@@ -5,6 +5,12 @@ import {
   GenerativeModel,
   GenerationConfig,
 } from '@google/generative-ai';
+import {
+  AiAdapter,
+  AiGenerationConfig,
+  AiResponse,
+  parseJsonFromModelText,
+} from './ai-adapter.interface';
 
 /**
  * GeminiAdapter
@@ -18,7 +24,7 @@ import {
  * - No credit card required
  */
 @Injectable()
-export class GeminiAdapter {
+export class GeminiAdapter implements AiAdapter {
   private readonly logger = new Logger(GeminiAdapter.name);
   private readonly client: GoogleGenerativeAI;
   private readonly model: GenerativeModel;
@@ -44,8 +50,8 @@ export class GeminiAdapter {
   async generateText(
     systemPrompt: string,
     userPrompt: string,
-    config?: Partial<GenerationConfig>,
-  ): Promise<GeminiResponse> {
+    config?: AiGenerationConfig,
+  ): Promise<AiResponse> {
     const startTime = Date.now();
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     const isMockMode = !apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE';
@@ -65,14 +71,17 @@ export class GeminiAdapter {
     }
 
     try {
+      // Mapped field by field rather than spread: the neutral config carries
+      // `jsonMode`, which is not a Gemini field and would leak into the SDK
+      // payload.
       const generationConfig: GenerationConfig = {
-        temperature: parseFloat(
-          this.configService.get('GEMINI_TEMPERATURE', '0.1'),
-        ),
-        maxOutputTokens: parseInt(
-          this.configService.get('GEMINI_MAX_TOKENS', '2048'),
-        ),
-        ...config,
+        temperature:
+          config?.temperature ??
+          parseFloat(this.configService.get('GEMINI_TEMPERATURE', '0.1')),
+        maxOutputTokens:
+          config?.maxOutputTokens ??
+          parseInt(this.configService.get('GEMINI_MAX_TOKENS', '2048')),
+        ...(config?.jsonMode ? { responseMimeType: 'application/json' } : {}),
       };
 
       const result = await this.withRetry(() =>
@@ -137,13 +146,7 @@ export class GeminiAdapter {
    * Strips markdown code fences that Gemini sometimes adds.
    */
   parseJsonResponse<T>(text: string): T {
-    const cleaned = text
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim();
-
-    return JSON.parse(cleaned) as T;
+    return parseJsonFromModelText<T>(text);
   }
 
   /**
@@ -428,11 +431,8 @@ export class GeminiAdapter {
   }
 }
 
-export interface GeminiResponse {
-  text: string;
-  modelUsed: string;
-  processingTimeMs: number;
-  tokenCount?: number;
-  success: boolean;
-  error?: string;
-}
+/**
+ * Retained as an alias so existing imports keep working. New code should use
+ * `AiResponse` — the shape is provider-neutral and always was.
+ */
+export type GeminiResponse = AiResponse;

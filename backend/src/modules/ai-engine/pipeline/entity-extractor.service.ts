@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { GeminiAdapter } from '../adapters/gemini.adapter';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { AI_ADAPTER } from '../adapters/ai-adapter.interface';
+import type { AiAdapter } from '../adapters/ai-adapter.interface';
 import { PrismaService } from '../../../common/database/prisma.service';
 import {
   ENTITY_EXTRACTION_SYSTEM_PROMPT,
@@ -50,7 +51,7 @@ export class EntityExtractorService {
   private readonly logger = new Logger(EntityExtractorService.name);
 
   constructor(
-    private readonly gemini: GeminiAdapter,
+    @Inject(AI_ADAPTER) private readonly ai: AiAdapter,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -83,7 +84,7 @@ export class EntityExtractorService {
 
     const promptVersion = isMultiTurn ? PROMPT_VERSION_V2 : PROMPT_VERSION;
 
-    const response = await this.gemini.generateText(systemPrompt, userPrompt, {
+    const response = await this.ai.generateText(systemPrompt, userPrompt, {
       temperature: 0.05,
       maxOutputTokens: 1024,
     });
@@ -94,7 +95,7 @@ export class EntityExtractorService {
 
     if (response.success && response.text) {
       try {
-        result = this.gemini.parseJsonResponse<ExtractedOrder>(response.text);
+        result = this.ai.parseJsonResponse<ExtractedOrder>(response.text);
       } catch {
         this.logger.warn('Failed to parse entity extraction JSON');
         result = this.emptyExtraction();
