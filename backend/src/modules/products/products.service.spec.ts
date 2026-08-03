@@ -1,10 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ProductVariantService } from './product-variant.service';
 import { ProductsService } from './products.service';
 import { PrismaService } from '../../common/database/prisma.service';
 import { ProductRetrieverService } from '../ai-engine/pipeline/product-retriever.service';
 import { NotFoundException } from '@nestjs/common';
 
 describe('ProductsService', () => {
+  const mockVariants = { ensureDefaultVariant: jest.fn() };
+
   let service: ProductsService;
 
   const mockPrisma = {
@@ -29,6 +32,7 @@ describe('ProductsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProductsService,
+        { provide: ProductVariantService, useValue: mockVariants },
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ProductRetrieverService, useValue: mockProductRetriever },
       ],
@@ -171,6 +175,54 @@ describe('ProductsService', () => {
       await expect(
         service.deleteProduct('tenant-1', 'nonexistent'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ── Phase 1 PR2: dual-write ─────────────────────────────────────
+  describe('default variant mirror', () => {
+    it('mirrors stock onto the default variant when a product is created', async () => {
+      // Without this the backfill would be the only thing populating variants,
+      // so every product created after it ran would be missing from the mirror
+      // — and PR3 would then read zero stock for exactly the newest products.
+      await service.createProduct('tenant-1', {
+        name: 'Blue Shirt',
+        price: 100,
+        stockQuantity: 12,
+      });
+
+      // The PERSISTED value, not the DTO's — defaults and coercion happen at
+      // write time, and mirroring the request instead of the row is how the
+      // two copies drift apart.
+      expect(mockVariants.ensureDefaultVariant).toHaveBeenCalledWith(
+        'tenant-1',
+        'prod-1',
+        10,
+      );
+    });
+
+    it('mirrors stock onto the default variant when a product is updated', async () => {
+      mockPrisma.product.findFirst.mockResolvedValue({
+        id: 'prod-1',
+        tenantId: 'tenant-1',
+        stockQuantity: 10,
+      });
+      // Prisma returns the updated row; the mirror reads its stock from there
+      // rather than from the DTO, so the mock has to model that.
+      mockPrisma.product.update.mockResolvedValue({
+        id: 'prod-1',
+        tenantId: 'tenant-1',
+        stockQuantity: 3,
+      });
+
+      await service.updateProduct('tenant-1', 'prod-1', {
+        stockQuantity: 3,
+      });
+
+      expect(mockVariants.ensureDefaultVariant).toHaveBeenCalledWith(
+        'tenant-1',
+        'prod-1',
+        3,
+      );
     });
   });
 });

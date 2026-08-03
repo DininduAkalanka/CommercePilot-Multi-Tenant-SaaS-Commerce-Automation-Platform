@@ -1,6 +1,7 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../common/database/prisma.service';
+import { ProductVariantService } from '../../products/product-variant.service';
 import { ECOMMERCE_ADAPTER } from '../interfaces/ecommerce-adapter.interface';
 import type {
   IEcommerceAdapter,
@@ -22,6 +23,7 @@ export class OrderSyncService {
     private readonly prisma: PrismaService,
     @Inject(ECOMMERCE_ADAPTER)
     private readonly adapter: IEcommerceAdapter,
+    private readonly variants: ProductVariantService,
   ) {}
 
   /**
@@ -126,6 +128,16 @@ export class OrderSyncService {
             where: { id: item.productId },
             data: { stockQuantity: { decrement: item.quantity } },
           });
+
+          // Dual-write (Phase 1 PR2), inside the same transaction so the two
+          // copies cannot disagree on rollback. Never throws — a stale mirror
+          // is repaired by re-running the backfill, a lost order is not.
+          await this.variants.decrementDefaultStock(
+            tenantId,
+            item.productId,
+            item.quantity,
+            tx,
+          );
         }
 
         await tx.auditLog.create({

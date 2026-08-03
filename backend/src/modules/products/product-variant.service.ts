@@ -42,6 +42,20 @@ export interface UpdateVariantInput {
  * exists so the backfill (PR2) and the read switch have a tested, tenant-safe
  * way to manage them.
  */
+/**
+ * The subset of the Prisma client this service writes through. Declaring it
+ * structurally lets the same methods run against either the root client or a
+ * transaction client, without importing Prisma's internal transaction types.
+ */
+type VariantWriteClient = {
+  productVariant: {
+    findFirst: (args: unknown) => Promise<{ id: string } | null>;
+    create: (args: unknown) => Promise<unknown>;
+    update: (args: unknown) => Promise<unknown>;
+    updateMany: (args: unknown) => Promise<{ count: number }>;
+  };
+};
+
 @Injectable()
 export class ProductVariantService {
   private readonly logger = new Logger(ProductVariantService.name);
@@ -245,6 +259,192 @@ export class ProductVariantService {
       where: { id: variantId },
       data: { deletedAt: new Date(), isActive: false },
     });
+  }
+
+  // ── PR2: backfill + dual-write ──────────────────────────────────
+  //
+  // Every product carries exactly one "default" variant mirroring its
+  // stockQuantity. Nothing reads variants yet — PR3 switches the readers — so
+  // the job here is only to make the two copies agree.
+  //
+  // The governing rule for all of it: the mirror must never break the path it
+  // mirrors. A failure to keep variant stock in step is a stale mirror, which
+  // PR2 can repair by re-running the backfill. A failure that aborts an order
+  // sync loses a real customer order, which nothing can repair.
+
+  /**
+   * Create or update the default variant so it carries `stockQuantity`.
+   *
+   * Idempotent by design: this runs on every product create and update, so it
+   * has to converge rather than accumulate. Creating blindly would hit the
+   * unique index and throw an exception that fails the product save the user
+   * actually asked for.
+   *
+   * Pass `client` to join an existing transaction. Order sync decrements
+   * product stock inside one; writing the mirror outside it would leave the
+   * two disagreeing whenever that transaction rolls back.
+   */
+  async ensureDefaultVariant(
+    tenantId: string,
+    productId: string,
+    stockQuantity: number,
+    client?: VariantWriteClient,
+  ): Promise<void> {
+    const db = client ?? this.prisma;
+
+    const existing = await db.productVariant.findFirst({
+      where: {
+        tenantId,
+        productId,
+        attributeKey: ProductVariantService.DEFAULT_KEY,
+      },
+    });
+
+    if (existing) {
+      await db.productVariant.update({
+        where: { id: existing.id },
+        data: {
+          stockQuantity,
+          // Revive rather than collide: the unique index covers soft-deleted
+          // rows, so a resurrected product would otherwise be unable to
+          // regain its default variant.
+          deletedAt: null,
+        },
+      });
+
+      return;
+    }
+
+    await db.productVariant.create({
+      data: {
+        tenantId,
+        productId,
+        attributes: {},
+        attributeKey: ProductVariantService.DEFAULT_KEY,
+        stockQuantity,
+        // Null price means "inherit the product price", which is exactly what
+        // a default variant should do.
+        price: null,
+        isActive: true,
+      },
+    });
+  }
+
+  /**
+   * Mirror a stock decrement onto the default variant.
+   *
+   * Deliberately swallows every failure. This is called from inside order
+   * sync, and no mirror is worth losing a real order over — a stale variant
+   * is repaired by re-running the backfill, a lost order is not repaired at
+   * all. Nothing reads these values yet, so a miss is invisible until PR3.
+   *
+   * `updateMany` rather than `update` because products backfilled later may
+   * legitimately have no default variant yet; matching zero rows is a normal
+   * rollout state, not an error.
+   */
+  async decrementDefaultStock(
+    tenantId: string,
+    productId: string,
+    quantity: number,
+    client?: VariantWriteClient,
+  ): Promise<void> {
+    const db = client ?? this.prisma;
+
+    try {
+      const result = await db.productVariant.updateMany({
+        where: {
+          tenantId,
+          productId,
+          attributeKey: ProductVariantService.DEFAULT_KEY,
+          deletedAt: null,
+        },
+        // Mirrors the product decrement exactly, including allowing negative
+        // stock. Clamping here would make the two copies disagree, and PR3
+        // would then silently change behaviour when reads switch over.
+        data: { stockQuantity: { decrement: quantity } },
+      });
+
+      if (result.count === 0) {
+        this.logger.debug(
+          `[${tenantId}] No default variant for product ${productId} — ` +
+            'skipping mirror (backfill will reconcile it)',
+        );
+      }
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `[${tenantId}] Failed to mirror stock decrement for product ` +
+          `${productId}: ${detail}. Product stock is authoritative; ` +
+          're-run the variant backfill to reconcile.',
+      );
+    }
+  }
+
+  /**
+   * Give every product without variants a default one carrying its stock.
+   *
+   * Safe to re-run: it selects only products with NO variants at all, so a
+   * product that already has real size/colour variants never gains a spurious
+   * "default" alongside them. That matters because this runs on deploy and
+   * will also be run by hand to reconcile after a failed mirror.
+   *
+   * Paginates rather than loading the catalogue into memory, and keeps going
+   * past individual failures — one bad row must not abandon the rest.
+   */
+  async backfillDefaults(
+    tenantId?: string,
+    batchSize = 200,
+  ): Promise<{ created: number; failed: number }> {
+    let created = 0;
+    let failed = 0;
+
+    for (;;) {
+      const products = await this.prisma.product.findMany({
+        where: {
+          ...(tenantId ? { tenantId } : {}),
+          deletedAt: null,
+          variants: { none: {} },
+        },
+        select: { id: true, tenantId: true, stockQuantity: true },
+        take: batchSize,
+      });
+
+      if (products.length === 0) break;
+
+      for (const product of products) {
+        try {
+          await this.prisma.productVariant.create({
+            data: {
+              tenantId: product.tenantId,
+              productId: product.id,
+              attributes: {},
+              attributeKey: ProductVariantService.DEFAULT_KEY,
+              stockQuantity: product.stockQuantity,
+              price: null,
+              isActive: true,
+            },
+          });
+          created += 1;
+        } catch (error: unknown) {
+          failed += 1;
+          const detail =
+            error instanceof Error ? error.message : 'Unknown error';
+          this.logger.error(
+            `Backfill failed for product ${product.id}: ${detail}`,
+          );
+        }
+      }
+
+      // Every successful create removes a row from the next query's result
+      // set. If an entire batch failed, the same rows would come back forever.
+      if (created === 0 && failed >= products.length) break;
+    }
+
+    this.logger.log(
+      `Variant backfill complete: ${created} created, ${failed} failed`,
+    );
+
+    return { created, failed };
   }
 
   // ── Guards ──────────────────────────────────────────────────────
