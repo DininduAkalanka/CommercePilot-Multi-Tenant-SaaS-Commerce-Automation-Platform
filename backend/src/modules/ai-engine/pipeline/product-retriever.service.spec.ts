@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ProductRetrieverService } from './product-retriever.service';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { AI_ADAPTER } from '../adapters/ai-adapter.interface';
+import { EMBEDDING_PROVIDER } from '../adapters/embedding-provider.interface';
 
 describe('ProductRetrieverService', () => {
   let service: ProductRetrieverService;
@@ -19,7 +20,14 @@ describe('ProductRetrieverService', () => {
   };
 
   const mockAi = {
+    generateText: jest.fn(),
+    parseJsonResponse: jest.fn(),
+  };
+
+  const mockEmbeddings = {
     generateEmbedding: jest.fn(),
+    generateEmbeddings: jest.fn(),
+    dimensions: 768,
   };
 
   beforeEach(async () => {
@@ -28,6 +36,7 @@ describe('ProductRetrieverService', () => {
         ProductRetrieverService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AI_ADAPTER, useValue: mockAi },
+        { provide: EMBEDDING_PROVIDER, useValue: mockEmbeddings },
       ],
     }).compile();
 
@@ -42,7 +51,7 @@ describe('ProductRetrieverService', () => {
     // vectors when no key was set OR on any API error, so a single transient
     // failure permanently wrote 768 dimensions of noise into the column.
     it('skips vector search and falls back to text search when no embedding', async () => {
-      mockAi.generateEmbedding.mockResolvedValue(null);
+      mockEmbeddings.generateEmbedding.mockResolvedValue(null);
       mockPrisma.product.findMany.mockResolvedValue([]);
 
       await service.retrieve('tenant-1', 'msg-1', 'I want a mouse');
@@ -60,7 +69,7 @@ describe('ProductRetrieverService', () => {
         sku: 'WM-1',
         attributes: {},
       });
-      mockAi.generateEmbedding.mockResolvedValue(null);
+      mockEmbeddings.generateEmbedding.mockResolvedValue(null);
 
       await service.generateAndStoreEmbedding('p1', 'tenant-1');
 
@@ -77,7 +86,9 @@ describe('ProductRetrieverService', () => {
         sku: 'WM-1',
         attributes: {},
       });
-      mockAi.generateEmbedding.mockResolvedValue(new Array(768).fill(0.1));
+      mockEmbeddings.generateEmbedding.mockResolvedValue(
+        new Array(768).fill(0.1),
+      );
       mockPrisma.$executeRaw.mockResolvedValue(1);
 
       await service.generateAndStoreEmbedding('p1', 'tenant-1');
@@ -94,7 +105,7 @@ describe('ProductRetrieverService', () => {
      * names it exactly, so retrieval must search on both.
      */
     it('searches on the ad copy as well as the customer message', async () => {
-      mockAi.generateEmbedding.mockResolvedValue(null);
+      mockEmbeddings.generateEmbedding.mockResolvedValue(null);
       mockPrisma.product.findMany.mockResolvedValue([]);
 
       await service.retrieve(
@@ -120,7 +131,7 @@ describe('ProductRetrieverService', () => {
     });
 
     it('behaves exactly as before when there is no referral', async () => {
-      mockAi.generateEmbedding.mockResolvedValue(null);
+      mockEmbeddings.generateEmbedding.mockResolvedValue(null);
       mockPrisma.product.findMany.mockResolvedValue([]);
 
       await service.retrieve('tenant-1', 'msg-1', 'I want a mouse');
@@ -137,7 +148,9 @@ describe('ProductRetrieverService', () => {
     });
 
     it('embeds the combined text for vector search', async () => {
-      mockAi.generateEmbedding.mockResolvedValue(new Array(768).fill(0.1));
+      mockEmbeddings.generateEmbedding.mockResolvedValue(
+        new Array(768).fill(0.1),
+      );
       mockPrisma.$queryRaw.mockResolvedValue([]);
       mockPrisma.product.findMany.mockResolvedValue([]);
 
@@ -145,7 +158,7 @@ describe('ProductRetrieverService', () => {
 
       // The query vector must represent the ad copy too, or semantic search is
       // still working from an empty message.
-      expect(mockAi.generateEmbedding).toHaveBeenCalledWith(
+      expect(mockEmbeddings.generateEmbedding).toHaveBeenCalledWith(
         expect.stringContaining('Cotton Saree'),
       );
     });
@@ -169,7 +182,9 @@ describe('ProductRetrieverService', () => {
       (mockCall[0] as string[]).join('?');
 
     it('queries vector search with quoted camelCase columns', async () => {
-      mockAi.generateEmbedding.mockResolvedValue(new Array(768).fill(0.1));
+      mockEmbeddings.generateEmbedding.mockResolvedValue(
+        new Array(768).fill(0.1),
+      );
       mockPrisma.$queryRaw.mockResolvedValue([]);
       mockPrisma.product.findMany.mockResolvedValue([]);
 
@@ -196,7 +211,9 @@ describe('ProductRetrieverService', () => {
         sku: 'WM-1',
         attributes: {},
       });
-      mockAi.generateEmbedding.mockResolvedValue(new Array(768).fill(0.1));
+      mockEmbeddings.generateEmbedding.mockResolvedValue(
+        new Array(768).fill(0.1),
+      );
       mockPrisma.$executeRaw.mockResolvedValue(1);
 
       await service.generateAndStoreEmbedding('p1', 'tenant-1');
@@ -214,7 +231,7 @@ describe('ProductRetrieverService', () => {
     // never hit "Wireless Mouse" — the fallback returned nothing exactly when
     // it was needed.
     it('matches on individual meaningful terms, not the whole sentence', async () => {
-      mockAi.generateEmbedding.mockResolvedValue(null);
+      mockEmbeddings.generateEmbedding.mockResolvedValue(null);
       mockPrisma.product.findMany.mockResolvedValue([]);
 
       await service.retrieve('tenant-1', 'msg-1', 'I want to buy a mouse');
@@ -233,7 +250,7 @@ describe('ProductRetrieverService', () => {
     });
 
     it('returns nothing when the message has no meaningful terms', async () => {
-      mockAi.generateEmbedding.mockResolvedValue(null);
+      mockEmbeddings.generateEmbedding.mockResolvedValue(null);
 
       const result = await service.retrieve('tenant-1', 'msg-1', 'hi there');
 

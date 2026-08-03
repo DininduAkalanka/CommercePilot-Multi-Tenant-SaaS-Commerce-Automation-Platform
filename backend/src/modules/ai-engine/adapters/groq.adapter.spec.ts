@@ -252,32 +252,4 @@ describe('GroqAdapter', () => {
       expect(adapter.parseJsonResponse('  \n {"a":1}  \n ')).toEqual({ a: 1 });
     });
   });
-
-  // ── generateEmbedding ───────────────────────────────────────────
-  describe('generateEmbedding', () => {
-    it('always returns null — Groq serves no embedding models', async () => {
-      // Verified against the live API: the models endpoint lists 15 models and
-      // none support embeddings. Returning null makes retrieval degrade to text
-      // search, which is correct and visible.
-      const res = await adapter.generateEmbedding('blue cotton shirt');
-
-      expect(res).toBeNull();
-    });
-
-    it('never invents a vector', async () => {
-      // A random vector would poison pgvector similarity silently: every search
-      // would return confident nonsense with no error anywhere.
-      const a = await adapter.generateEmbedding('blue shirt');
-      const b = await adapter.generateEmbedding('blue shirt');
-
-      expect(a).toBeNull();
-      expect(b).toBeNull();
-    });
-
-    it('makes no network call', async () => {
-      await adapter.generateEmbedding('anything');
-
-      expect(fetchMock).not.toHaveBeenCalled();
-    });
-  });
 });

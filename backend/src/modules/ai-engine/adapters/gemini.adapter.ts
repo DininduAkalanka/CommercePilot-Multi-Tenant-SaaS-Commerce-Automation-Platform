@@ -150,53 +150,6 @@ export class GeminiAdapter implements AiAdapter {
   }
 
   /**
-   * Generate an embedding for product catalog RAG.
-   * Uses text-embedding-004 (768 dimensions, free).
-   *
-   * Returns `null` when no embedding can be produced — never a substitute
-   * vector. This previously returned `Math.random() - 0.5` values on a missing
-   * key OR on any API error, which meant a single transient failure wrote 768
-   * dimensions of noise into `products.embedding` permanently. Nothing ever
-   * recomputed it, so that product's semantic search was silently poisoned for
-   * good, and the only trace was one log line.
-   *
-   * Callers must treat `null` as "no embedding available" and degrade to text
-   * search, which is a correct, visible fallback.
-   */
-  async generateEmbedding(text: string): Promise<number[] | null> {
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
-      this.logger.debug(
-        '[MOCK AI] No API key — no embedding generated (text search will be used)',
-      );
-      return null;
-    }
-
-    const embeddingModel = this.configService.get<string>(
-      'GEMINI_EMBEDDING_MODEL',
-      'text-embedding-004',
-    );
-
-    try {
-      const embeddingClient = this.client.getGenerativeModel({
-        model: embeddingModel,
-      });
-
-      const result = await this.withRetry(() =>
-        embeddingClient.embedContent(text),
-      );
-      return result.embedding.values;
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      this.logger.error(
-        `Failed to generate embedding: ${message}. No embedding stored — ` +
-          'the affected product will fall back to text search.',
-      );
-      return null;
-    }
-  }
-
-  /**
    * Run an API call with a timeout and bounded retries.
    *
    * Gemini's free tier allows 15 requests/minute; a burst of WhatsApp messages

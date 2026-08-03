@@ -4,6 +4,12 @@ import { AiEngineService } from './ai-engine.service';
 import { GeminiAdapter } from './adapters/gemini.adapter';
 import { GroqAdapter } from './adapters/groq.adapter';
 import { AI_ADAPTER, AiAdapter } from './adapters/ai-adapter.interface';
+import { JinaEmbeddingProvider } from './adapters/jina-embedding.provider';
+import { NullEmbeddingProvider } from './adapters/null-embedding.provider';
+import {
+  EMBEDDING_PROVIDER,
+  EmbeddingProvider,
+} from './adapters/embedding-provider.interface';
 import { IntentDetectorService } from './pipeline/intent-detector.service';
 import { ProductRetrieverService } from './pipeline/product-retriever.service';
 import { EntityExtractorService } from './pipeline/entity-extractor.service';
@@ -53,6 +59,45 @@ import { DuplicateDetectorService } from './duplicate-detector.service';
         }
 
         return groq;
+      },
+    },
+    // Embeddings are selected separately from text generation: the two come
+    // from different vendors now, and Groq has no embedding models at all.
+    JinaEmbeddingProvider,
+    NullEmbeddingProvider,
+    {
+      provide: EMBEDDING_PROVIDER,
+      inject: [ConfigService, JinaEmbeddingProvider, NullEmbeddingProvider],
+      useFactory: (
+        config: ConfigService,
+        jina: JinaEmbeddingProvider,
+        none: NullEmbeddingProvider,
+      ): EmbeddingProvider => {
+        const provider = (
+          config.get<string>('EMBEDDING_PROVIDER') ?? 'none'
+        ).toLowerCase();
+        const logger = new Logger('EmbeddingProvider');
+
+        if (provider === 'jina') {
+          logger.log(`Using Jina (${jina.dimensions} dimensions)`);
+          return jina;
+        }
+
+        // Defaults to none on purpose. Vector search then returns nothing and
+        // retrieval falls back to text matching — correct and visible, rather
+        // than silently ranking against vectors nobody configured.
+        if (provider !== 'none') {
+          logger.warn(
+            `Unknown EMBEDDING_PROVIDER "${provider}" — falling back to none. ` +
+              'Valid values: jina, none.',
+          );
+        } else {
+          logger.log(
+            'No embedding provider — product search uses text matching',
+          );
+        }
+
+        return none;
       },
     },
     IntentDetectorService,

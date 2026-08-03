@@ -2,6 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { AI_ADAPTER } from '../adapters/ai-adapter.interface';
 import type { AiAdapter } from '../adapters/ai-adapter.interface';
+import { EMBEDDING_PROVIDER } from '../adapters/embedding-provider.interface';
+import type { EmbeddingProvider } from '../adapters/embedding-provider.interface';
 import { AIProcessingStage } from '@prisma/client';
 
 export interface RetrievedProduct {
@@ -42,6 +44,10 @@ export class ProductRetrieverService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(AI_ADAPTER) private readonly ai: AiAdapter,
+    // Separate from the LLM: embeddings and text generation come from
+    // different vendors, and the text provider may have no embedding models.
+    @Inject(EMBEDDING_PROVIDER)
+    private readonly embeddings: EmbeddingProvider,
   ) {}
 
   /**
@@ -137,7 +143,7 @@ export class ProductRetrieverService {
       .join(' | ');
 
     try {
-      const embedding = await this.ai.generateEmbedding(textToEmbed);
+      const embedding = await this.embeddings.generateEmbedding(textToEmbed);
 
       if (embedding === null) {
         // No embedding available (no API key, or the call failed). Leave the
@@ -174,7 +180,7 @@ export class ProductRetrieverService {
     tenantId: string,
     query: string,
   ): Promise<RetrievedProduct[]> {
-    const queryEmbedding = await this.ai.generateEmbedding(query);
+    const queryEmbedding = await this.embeddings.generateEmbedding(query);
 
     // No embedding for the query means no meaningful vector comparison is
     // possible. Return empty so retrieve() falls through to text search
