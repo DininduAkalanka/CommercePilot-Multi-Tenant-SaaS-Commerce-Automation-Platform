@@ -3,6 +3,7 @@ import { ProductRetrieverService } from './product-retriever.service';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { AI_ADAPTER } from '../adapters/ai-adapter.interface';
 import { EMBEDDING_PROVIDER } from '../adapters/embedding-provider.interface';
+import { ProductVariantService } from '../../products/product-variant.service';
 
 describe('ProductRetrieverService', () => {
   let service: ProductRetrieverService;
@@ -37,6 +38,21 @@ describe('ProductRetrieverService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AI_ADAPTER, useValue: mockAi },
         { provide: EMBEDDING_PROVIDER, useValue: mockEmbeddings },
+        {
+          // Pass-through: PR3 stock resolution has its own suite.
+          provide: ProductVariantService,
+          useValue: {
+            resolveStockMany: jest.fn(
+              (
+                _t: string,
+                items: { productId: string; fallbackStock: number }[],
+              ) =>
+                Promise.resolve(
+                  new Map(items.map((i) => [i.productId, i.fallbackStock])),
+                ),
+            ),
+          },
+        },
       ],
     }).compile();
 

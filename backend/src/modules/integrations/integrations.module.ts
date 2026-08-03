@@ -6,10 +6,10 @@ import { WooCommerceAdapter } from './adapters/woocommerce.adapter';
 import { ECOMMERCE_ADAPTER } from './interfaces/ecommerce-adapter.interface';
 import { DatabaseModule } from '../../common/database/database.module';
 import { AiEngineModule } from '../ai-engine/ai-engine.module'; // for ProductRetrieverService
-import { ProductsModule } from '../products/products.module'; // for ProductVariantService (dual-write)
+import { ProductVariantModule } from '../products/product-variant.module'; // dual-write
 
 @Module({
-  imports: [DatabaseModule, AiEngineModule, ProductsModule],
+  imports: [DatabaseModule, AiEngineModule, ProductVariantModule],
   controllers: [IntegrationsController],
   providers: [
     ProductSyncService,

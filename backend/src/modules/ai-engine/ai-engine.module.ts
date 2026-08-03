@@ -1,5 +1,6 @@
 import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ProductVariantModule } from '../products/product-variant.module';
 import { AiEngineService } from './ai-engine.service';
 import { GeminiAdapter } from './adapters/gemini.adapter';
 import { GroqAdapter } from './adapters/groq.adapter';
@@ -22,6 +23,7 @@ import { UnfulfilledDemandService } from './unfulfilled-demand.service';
 import { DuplicateDetectorService } from './duplicate-detector.service';
 
 @Module({
+  imports: [ProductVariantModule],
   controllers: [AiMetricsController],
   providers: [
     AiEngineService,

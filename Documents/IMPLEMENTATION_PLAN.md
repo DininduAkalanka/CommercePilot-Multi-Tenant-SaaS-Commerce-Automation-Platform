@@ -13,7 +13,7 @@
 |---|---|
 | **Pre-work** — audit remediation | ✅ Complete · merged · live |
 | **Phase 0** — Instrument & measure | ✅ Complete · merged · live |
-| **Phase 1** — `ProductVariant` | 🟡 PR1 merged · PR2 built — launch prerequisite |
+| **Phase 1** — `ProductVariant` | 🟡 PR1 merged · PR2+PR3 built · PR4 remains |
 | **Phase 2** — Stop losing orders | 🟡 4 of 6 merged · 2.5 / 2.6 remain |
 | **Phase 3** — Sinhala / Singlish | 🟡 Query normalisation merged · tuning blocked on eval dataset |
 | **Phase 4** — Voice & images | ⬜ Not started |
@@ -161,8 +161,22 @@ WooCommerce with no size/colour.
       leaves product and variant still agreeing.
       Mirror failures never throw into the caller: a stale mirror is repaired
       by re-running the backfill, a lost order is not. Suite 311 → 327.
-- [ ] **PR3 Switch reads** behind `VARIANT_STOCK_ENABLED` — `validateStock`,
+- [x] **PR3 Switch reads** behind `VARIANT_STOCK_ENABLED` — `validateStock`,
       RAG context, order-sync decrement. *Risk: medium; flag off reverts instantly.*
+      **Built** — branch `feat/variant-stock-reads`. Default OFF.
+      Three read paths switched: order `validateStock`, the AI conflict
+      resolver, and the RAG catalogue context. All three share one resolver so
+      they cannot disagree — the AI promising stock that validation then
+      rejects would be worse than either alone.
+      Falls back to product stock on ANY doubt: flag off, no variant row, or a
+      failed lookup. A genuine zero still reports zero, which is the point.
+      Verified live: flag off → 12 (unchanged), flag on → 3 (variant), and a
+      product with no mirror → 44 (fallback, not 0).
+      ⚠️ **Run `npm run backfill:variants` in production BEFORE enabling.**
+      `ProductVariantService` moved into its own `ProductVariantModule`:
+      `ProductsModule` imports `AiEngineModule`, so `AiEngineModule` importing
+      products back would have been a dependency cycle. Unit tests passed
+      regardless — only a container boot caught it.
 - [ ] **PR4 Contract** — `Product.stockQuantity` becomes a maintained rollup.
       *Do this days after PR3.*
 - [ ] **WooCommerce** — fetch variations (N+1, only for `type === 'variable'`,

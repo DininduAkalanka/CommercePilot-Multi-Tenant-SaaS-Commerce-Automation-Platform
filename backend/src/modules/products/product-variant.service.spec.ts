@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ProductVariantService } from './product-variant.service';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/database/prisma.service';
 
 /**
@@ -14,6 +15,9 @@ import { PrismaService } from '../../common/database/prisma.service';
 describe('ProductVariantService', () => {
   let service: ProductVariantService;
 
+  // Mutable so individual tests can flip the read switch.
+  let flags: Record<string, string>;
+
   const mockPrisma = {
     product: { findFirst: jest.fn(), findMany: jest.fn() },
     productVariant: {
@@ -26,10 +30,20 @@ describe('ProductVariantService', () => {
   };
 
   beforeEach(async () => {
+    flags = { VARIANT_STOCK_ENABLED: 'true' };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProductVariantService,
         { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn(
+              (key: string, fallback?: string) => flags[key] ?? fallback,
+            ),
+          },
+        },
       ],
     }).compile();
 
@@ -509,6 +523,176 @@ describe('ProductVariantService', () => {
 
       expect(result.created).toBe(1);
       expect(result.failed).toBe(1);
+    });
+  });
+
+  // ── PR3: switch reads ───────────────────────────────────────────
+  //
+  // The dangerous step. Until now variants were written but never read, so a
+  // wrong value was invisible. From here a wrong value tells a customer their
+  // size is available when it is not.
+  //
+  // Hence the rule below: resolveStock falls back to the product's own stock
+  // for ANY doubt — flag off, no variant row, or a lookup failure. Falling
+  // back reproduces today's behaviour exactly, which is known-good. Returning
+  // 0 on doubt would silently refuse orders the shop can actually fulfil.
+  describe('resolveStock', () => {
+    it('returns the variant stock when the flag is on and a variant exists', async () => {
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: 'v1',
+        stockQuantity: 3,
+      });
+
+      const stock = await service.resolveStock('tenant-1', 'prod-1', 12);
+
+      expect(stock).toBe(3);
+    });
+
+    it('returns the product stock when the flag is off, without querying', async () => {
+      // The flag has to be a genuine kill switch: if a bad backfill is
+      // discovered in production, flipping it must restore old behaviour with
+      // no deploy and no database access.
+      flags.VARIANT_STOCK_ENABLED = 'false';
+
+      const stock = await service.resolveStock('tenant-1', 'prod-1', 12);
+
+      expect(stock).toBe(12);
+      expect(mockPrisma.productVariant.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('defaults to OFF when the flag is unset', async () => {
+      // A read switch must never enable itself. Anyone deploying without
+      // running the backfill first would otherwise see every product report
+      // zero stock.
+      delete flags.VARIANT_STOCK_ENABLED;
+
+      const stock = await service.resolveStock('tenant-1', 'prod-1', 12);
+
+      expect(stock).toBe(12);
+      expect(mockPrisma.productVariant.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('falls back to product stock when the product has no variant row', async () => {
+      // A product created between the backfill running and this deploy has no
+      // mirror yet. Reporting 0 would refuse an order the shop can fulfil.
+      mockPrisma.productVariant.findFirst.mockResolvedValue(null);
+
+      const stock = await service.resolveStock('tenant-1', 'prod-1', 12);
+
+      expect(stock).toBe(12);
+    });
+
+    it('falls back to product stock when the lookup throws', async () => {
+      mockPrisma.productVariant.findFirst.mockRejectedValue(
+        new Error('connection lost'),
+      );
+
+      const stock = await service.resolveStock('tenant-1', 'prod-1', 12);
+
+      expect(stock).toBe(12);
+    });
+
+    it('resolves a specific combination when attributes are given', async () => {
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: 'v1',
+        stockQuantity: 2,
+      });
+
+      await service.resolveStock('tenant-1', 'prod-1', 12, {
+        Color: 'BLUE',
+        size: ' l ',
+      });
+
+      expect(mockPrisma.productVariant.findFirst).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          productId: 'prod-1',
+          attributeKey: 'color=blue|size=l',
+          deletedAt: null,
+        },
+      });
+    });
+
+    it('uses the default variant when no attributes are given', async () => {
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: 'v1',
+        stockQuantity: 5,
+      });
+
+      await service.resolveStock('tenant-1', 'prod-1', 12);
+
+      expect(mockPrisma.productVariant.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ attributeKey: 'default' }),
+        }),
+      );
+    });
+
+    it('reports zero when the variant genuinely has zero stock', async () => {
+      // Zero is a real answer, not a missing one — it must not be mistaken for
+      // "no variant" and replaced by the product total. This is the whole
+      // point of the feature: "blue in L is sold out" while the shirt is not.
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: 'v1',
+        stockQuantity: 0,
+      });
+
+      const stock = await service.resolveStock('tenant-1', 'prod-1', 12);
+
+      expect(stock).toBe(0);
+    });
+  });
+
+  describe('resolveStockMany', () => {
+    it('resolves a whole catalogue page in one query', async () => {
+      // RAG context lists top-K products. One query per product would add K
+      // round trips to every customer message.
+      mockPrisma.productVariant.findMany.mockResolvedValue([
+        { productId: 'p1', stockQuantity: 3 },
+        { productId: 'p2', stockQuantity: 0 },
+      ]);
+
+      const result = await service.resolveStockMany('tenant-1', [
+        { productId: 'p1', fallbackStock: 10 },
+        { productId: 'p2', fallbackStock: 20 },
+        { productId: 'p3', fallbackStock: 30 },
+      ]);
+
+      expect(mockPrisma.productVariant.findMany).toHaveBeenCalledTimes(1);
+      expect(result.get('p1')).toBe(3);
+      expect(result.get('p2')).toBe(0);
+      // p3 has no mirror row — falls back rather than reporting zero
+      expect(result.get('p3')).toBe(30);
+    });
+
+    it('returns every fallback untouched when the flag is off', async () => {
+      flags.VARIANT_STOCK_ENABLED = 'false';
+
+      const result = await service.resolveStockMany('tenant-1', [
+        { productId: 'p1', fallbackStock: 10 },
+      ]);
+
+      expect(result.get('p1')).toBe(10);
+      expect(mockPrisma.productVariant.findMany).not.toHaveBeenCalled();
+    });
+
+    it('falls back for every product when the query fails', async () => {
+      mockPrisma.productVariant.findMany.mockRejectedValue(new Error('down'));
+
+      const result = await service.resolveStockMany('tenant-1', [
+        { productId: 'p1', fallbackStock: 10 },
+        { productId: 'p2', fallbackStock: 20 },
+      ]);
+
+      expect(result.get('p1')).toBe(10);
+      expect(result.get('p2')).toBe(20);
+    });
+
+    it('handles an empty list without querying', async () => {
+      const result = await service.resolveStockMany('tenant-1', []);
+
+      expect(result.size).toBe(0);
+      expect(mockPrisma.productVariant.findMany).not.toHaveBeenCalled();
     });
   });
 });

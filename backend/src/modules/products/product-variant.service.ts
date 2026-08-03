@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/database/prisma.service';
 import { Prisma } from '@prisma/client';
 
@@ -63,7 +64,10 @@ export class ProductVariantService {
   /** Key used for a product with no options at all. */
   private static readonly DEFAULT_KEY = 'default';
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
 
   /**
    * Canonical form of an attribute set: sorted, lowercased, `color=blue|size=l`.
@@ -445,6 +449,122 @@ export class ProductVariantService {
     );
 
     return { created, failed };
+  }
+
+  // ── PR3: switch reads ───────────────────────────────────────────
+  //
+  // The dangerous step. Until now variants were written but never read, so a
+  // wrong value was invisible. From here a wrong value tells a customer their
+  // size is in stock when it is not — the exact promise-what-cannot-ship
+  // failure this whole feature exists to prevent.
+  //
+  // Every method below therefore falls back to the product's own stock on ANY
+  // doubt: flag off, no variant row, or a failed lookup. Falling back
+  // reproduces today's behaviour, which is known-good. Returning 0 on doubt
+  // would silently refuse orders the shop can actually fulfil, which is a
+  // worse failure and a much harder one to notice.
+
+  /**
+   * Stock for one product, from the variant mirror when enabled.
+   *
+   * `fallbackStock` is the product's own `stockQuantity` — callers already
+   * have it loaded, so passing it avoids a second query and makes the
+   * fallback explicit at every call site rather than hidden in here.
+   */
+  async resolveStock(
+    tenantId: string,
+    productId: string,
+    fallbackStock: number,
+    attributes?: VariantAttributes,
+  ): Promise<number> {
+    if (!this.variantReadsEnabled()) return fallbackStock;
+
+    try {
+      const variant = await this.prisma.productVariant.findFirst({
+        where: {
+          tenantId,
+          productId,
+          attributeKey: ProductVariantService.attributeKey(attributes),
+          deletedAt: null,
+        },
+      });
+
+      // No row means this product predates the backfill, or was created
+      // between it running and this deploy. Its product stock is still
+      // correct, so use it.
+      if (!variant) return fallbackStock;
+
+      // A genuine zero must survive: "blue in L is sold out" while the shirt
+      // itself is not. Treating 0 as missing would defeat the entire feature.
+      return variant.stockQuantity;
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `[${tenantId}] Variant stock lookup failed for ${productId}: ` +
+          `${detail}. Falling back to product stock.`,
+      );
+
+      return fallbackStock;
+    }
+  }
+
+  /**
+   * Stock for many products in one query.
+   *
+   * RAG context lists the top-K retrieved products, and one query per product
+   * would add K round trips to every customer message.
+   *
+   * Returns a map keyed by productId, always containing an entry for every
+   * input — callers can read it without null checks.
+   */
+  async resolveStockMany(
+    tenantId: string,
+    items: { productId: string; fallbackStock: number }[],
+  ): Promise<Map<string, number>> {
+    const resolved = new Map<string, number>(
+      items.map((i) => [i.productId, i.fallbackStock]),
+    );
+
+    if (items.length === 0 || !this.variantReadsEnabled()) return resolved;
+
+    try {
+      const variants = await this.prisma.productVariant.findMany({
+        where: {
+          tenantId,
+          productId: { in: items.map((i) => i.productId) },
+          attributeKey: ProductVariantService.DEFAULT_KEY,
+          deletedAt: null,
+        },
+        select: { productId: true, stockQuantity: true },
+      });
+
+      for (const variant of variants) {
+        resolved.set(variant.productId, variant.stockQuantity);
+      }
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `[${tenantId}] Batch variant stock lookup failed: ${detail}. ` +
+          'Falling back to product stock for all items.',
+      );
+    }
+
+    return resolved;
+  }
+
+  /**
+   * Off unless explicitly enabled.
+   *
+   * A read switch must never enable itself: deploying without having run the
+   * backfill would otherwise make every product report zero stock. It is also
+   * the kill switch — if a bad mirror is found in production, flipping this
+   * restores the old behaviour with no deploy and no database access.
+   */
+  private variantReadsEnabled(): boolean {
+    return (
+      this.configService.get<string>('VARIANT_STOCK_ENABLED', 'false') ===
+      'true'
+    );
   }
 
   // ── Guards ──────────────────────────────────────────────────────
