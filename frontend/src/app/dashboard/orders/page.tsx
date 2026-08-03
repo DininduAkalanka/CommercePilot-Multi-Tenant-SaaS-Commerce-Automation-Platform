@@ -15,6 +15,7 @@ import {
   Check,
   Sparkles,
   X,
+  AlertCircle,
 } from '../../../components/icons';
 import ConfirmModal from '../../../components/ConfirmModal';
 import { ordersApi, productsApi } from '../../../lib/api';
@@ -26,6 +27,12 @@ interface DraftOrder {
   overallConfidence: number;
   status: string;
   createdAt: string;
+  /**
+   * Set when this draft repeats a recent one from the same customer
+   * (BUSINESS_RULES §18). Flagged for review, never auto-blocked — approving
+   * both would create two real WooCommerce orders.
+   */
+  duplicateOfId?: string | null;
   customer: {
     id: string;
     name: string;
@@ -273,6 +280,15 @@ export default function OrdersPage() {
                         <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
                         {(draft.overallConfidence * 100).toFixed(0)}% confidence
                       </span>
+                      {draft.duplicateOfId && (
+                        <span
+                          className="badge badge-pending"
+                          title="This customer sent a very similar order minutes ago. Check before approving — approving both creates two orders."
+                        >
+                          <AlertCircle size={11} />
+                          Possible duplicate
+                        </span>
+                      )}
                     </div>
                     <p className="t-muted" style={{ fontStyle: 'italic', marginBottom: 10, fontSize: '0.8125rem' }}>&quot;{draft.customerMessage}&quot;</p>
                     <div className="stack" style={{ gap: 6, marginBottom: 14 }}>

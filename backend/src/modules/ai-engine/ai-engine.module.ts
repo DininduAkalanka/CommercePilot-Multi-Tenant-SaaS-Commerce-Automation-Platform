@@ -9,6 +9,7 @@ import { ConflictResolverService } from './pipeline/conflict-resolver.service';
 import { AiMetricsService } from './ai-metrics.service';
 import { AiMetricsController } from './ai-metrics.controller';
 import { UnfulfilledDemandService } from './unfulfilled-demand.service';
+import { DuplicateDetectorService } from './duplicate-detector.service';
 
 @Module({
   controllers: [AiMetricsController],
@@ -22,6 +23,7 @@ import { UnfulfilledDemandService } from './unfulfilled-demand.service';
     ConflictResolverService,
     AiMetricsService,
     UnfulfilledDemandService,
+    DuplicateDetectorService,
   ],
   exports: [AiEngineService, ProductRetrieverService, ConflictResolverService],
 })
