@@ -7,6 +7,7 @@ import { ProductRetrieverService } from './pipeline/product-retriever.service';
 import { EntityExtractorService } from './pipeline/entity-extractor.service';
 import { ConfidenceScorerService } from './pipeline/confidence-scorer.service';
 import { UnfulfilledDemandService } from './unfulfilled-demand.service';
+import { DuplicateDetectorService } from './duplicate-detector.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('AiEngineService', () => {
@@ -57,6 +58,10 @@ describe('AiEngineService', () => {
     record: jest.fn().mockResolvedValue(undefined),
   };
 
+  const mockDuplicateDetector = {
+    findRecentDuplicate: jest.fn().mockResolvedValue(null),
+  };
+
   const mockEventEmitter = {
     emit: jest.fn(),
   };
@@ -72,6 +77,7 @@ describe('AiEngineService', () => {
         { provide: EntityExtractorService, useValue: mockEntityExtractor },
         { provide: ConfidenceScorerService, useValue: mockConfidenceScorer },
         { provide: UnfulfilledDemandService, useValue: mockUnfulfilledDemand },
+        { provide: DuplicateDetectorService, useValue: mockDuplicateDetector },
         { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile();
@@ -285,6 +291,90 @@ describe('AiEngineService', () => {
         await runWithUnmatchedItem(3);
 
         expect((mockPrisma as any).product.findFirst).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('duplicate detection (BUSINESS_RULES §18)', () => {
+      const runOrderPipeline = async () => {
+        mockIntentDetector.detect.mockResolvedValue({
+          intent: 'ORDER',
+          confidence: 0.95,
+        });
+        mockProductRetriever.retrieve.mockResolvedValue({
+          products: [{ id: 'p1', name: 'Shirt', price: 100, stockQuantity: 9 }],
+          catalogContext: 'catalog',
+        });
+        mockEntityExtractor.extract.mockResolvedValue({
+          items: [
+            {
+              product_query: 'shirt',
+              matched_product_id: 'p1',
+              matched_product_name: 'Shirt',
+              match_confidence: 0.95,
+              quantity: 2,
+              selected_attributes: {},
+            },
+          ],
+          delivery_info: {},
+          missing_fields: [],
+        });
+        mockConfidenceScorer.score.mockResolvedValue({
+          composite: 0.9,
+          intent: 0.95,
+          productMatch: 0.95,
+          completeness: 1,
+          routing: 'human_review',
+          missingFields: [],
+        });
+        mockPrisma.aIDraftOrder.create.mockResolvedValue({ id: 'draft-new' });
+        (mockPrisma as any).whatsAppMessage = {
+          update: jest.fn().mockResolvedValue({}),
+        };
+
+        await service.processMessage({
+          tenantId: 'tenant-1',
+          customerId: 'cust-1',
+          messageId: 'msg-2',
+          messageText: 'mata 2 shirt one',
+          autoApproveEnabled: false,
+          autoApproveThreshold: 0.95,
+          aiConfidenceThreshold: 0.85,
+        });
+
+        return mockPrisma.aIDraftOrder.create.mock.calls[0][0].data;
+      };
+
+      it('links the draft to the earlier one it repeats', async () => {
+        mockDuplicateDetector.findRecentDuplicate.mockResolvedValue(
+          'draft-earlier',
+        );
+
+        const data = await runOrderPipeline();
+
+        expect(data.duplicateOfId).toBe('draft-earlier');
+        // §18 says flag for review, never auto-block: the draft must still be
+        // created and still reach the owner as PENDING.
+        expect(data.status).toBe('PENDING');
+      });
+
+      it('leaves the link null when nothing similar is recent', async () => {
+        mockDuplicateDetector.findRecentDuplicate.mockResolvedValue(null);
+
+        const data = await runOrderPipeline();
+
+        expect(data.duplicateOfId).toBeNull();
+      });
+
+      it('compares the extracted lines, not the raw message', async () => {
+        mockDuplicateDetector.findRecentDuplicate.mockResolvedValue(null);
+
+        await runOrderPipeline();
+
+        expect(mockDuplicateDetector.findRecentDuplicate).toHaveBeenCalledWith(
+          'tenant-1',
+          'cust-1',
+          [{ productId: 'p1', productQuery: 'shirt', quantity: 2 }],
+        );
       });
     });
 

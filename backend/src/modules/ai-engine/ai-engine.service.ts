@@ -13,6 +13,7 @@ import {
   UnfulfilledReason,
 } from '@prisma/client';
 import { UnfulfilledDemandService } from './unfulfilled-demand.service';
+import { DuplicateDetectorService } from './duplicate-detector.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 export interface ProcessMessageInput {
@@ -73,6 +74,7 @@ export class AiEngineService {
     private readonly entityExtractor: EntityExtractorService,
     private readonly confidenceScorer: ConfidenceScorerService,
     private readonly unfulfilledDemand: UnfulfilledDemandService,
+    private readonly duplicateDetector: DuplicateDetectorService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -269,6 +271,20 @@ export class AiEngineService {
   ): Promise<string> {
     const draftId = uuidv4();
 
+    // BUSINESS_RULES §18 — flag, never block. A customer who genuinely orders
+    // the same thing twice is a real scenario; swallowing the second order
+    // would lose a sale. Pointing at the suspected original lets the owner
+    // compare and decide.
+    const duplicateOfId = await this.duplicateDetector.findRecentDuplicate(
+      input.tenantId,
+      input.customerId,
+      extractedOrder.items.map((item) => ({
+        productId: item.matched_product_id,
+        productQuery: item.product_query,
+        quantity: item.quantity,
+      })),
+    );
+
     await this.prisma.aIDraftOrder.create({
       data: {
         id: draftId,
@@ -282,6 +298,7 @@ export class AiEngineService {
         completenessScore: scores.completeness,
         overallConfidence: scores.composite,
         status: AIDraftStatus.PENDING,
+        duplicateOfId,
         items: {
           create: extractedOrder.items.map((item) => ({
             id: uuidv4(),

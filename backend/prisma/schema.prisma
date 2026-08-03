@@ -411,6 +411,13 @@ model AIDraftOrder {
   correctedByUserId String? @db.Uuid
   correctedAt DateTime?
 
+  /// Set when this draft looks like a repeat of an earlier one from the same
+  /// customer (BUSINESS_RULES §18). Flagged for owner review, never
+  /// auto-blocked — ordering the same thing twice is a legitimate thing to do.
+  duplicateOfId String?        @db.Uuid
+  duplicateOf   AIDraftOrder?  @relation("DraftDuplicate", fields: [duplicateOfId], references: [id])
+  duplicates    AIDraftOrder[] @relation("DraftDuplicate")
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
