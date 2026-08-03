@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ProductVariantService } from './product-variant.service';
+import { ProductVariantController } from './product-variant.controller';
 
 /**
  * ProductVariantService lives in its own module because four modules need it
@@ -14,6 +15,7 @@ import { ProductVariantService } from './product-variant.service';
  * copy registered per consumer.
  */
 @Module({
+  controllers: [ProductVariantController],
   providers: [ProductVariantService],
   exports: [ProductVariantService],
 })
