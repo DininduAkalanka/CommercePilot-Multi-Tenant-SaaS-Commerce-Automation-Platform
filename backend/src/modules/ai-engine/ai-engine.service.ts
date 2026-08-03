@@ -16,6 +16,7 @@ import {
 } from '@prisma/client';
 import { UnfulfilledDemandService } from './unfulfilled-demand.service';
 import { DuplicateDetectorService } from './duplicate-detector.service';
+import { SoftAlternativesService } from './soft-alternatives.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 export interface ProcessMessageInput {
@@ -48,6 +49,12 @@ export interface ProcessMessageOutput {
   missingFields: string[];
   followUpQuestion: string | null;
   extractedOrder?: any;
+  /**
+   * Ready-to-send message offering close in-stock alternatives, when the
+   * catalogue could not satisfy the request (Phase 2 item 2.5). Null when
+   * there is nothing honest to offer — the caller then keeps its own path.
+   */
+  softAlternatives?: string | null;
 }
 
 /**
@@ -78,6 +85,7 @@ export class AiEngineService {
     private readonly confidenceScorer: ConfidenceScorerService,
     private readonly unfulfilledDemand: UnfulfilledDemandService,
     private readonly duplicateDetector: DuplicateDetectorService,
+    private readonly softAlternatives: SoftAlternativesService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -150,6 +158,19 @@ export class AiEngineService {
     // extraction — record it before the information is lost with the failure.
     await this.recordUnfulfilledDemand(input, extractedOrder, products.length);
 
+    // Same signal, opposite audience: UnfulfilledDemand tells the shop about
+    // the miss, this tells the customer. Reuses the products retrieval already
+    // fetched — they are the closest matches in the catalogue by definition.
+    const unmatchedQuery =
+      extractedOrder.items.find(
+        (i: { matched_product_id: string | null; product_query: string }) =>
+          !i.matched_product_id && i.product_query,
+      )?.product_query ?? '';
+
+    const softAlternatives = unmatchedQuery
+      ? this.softAlternatives.build(unmatchedQuery, products)
+      : null;
+
     // ── Stage 4: Confidence Scoring ──────────────────────────────
     const confidenceScores = await this.confidenceScorer.score(
       input.tenantId,
@@ -206,6 +227,7 @@ export class AiEngineService {
     );
 
     return {
+      softAlternatives,
       intent: intentResult.intent,
       draftOrderId,
       routing: confidenceScores.routing,

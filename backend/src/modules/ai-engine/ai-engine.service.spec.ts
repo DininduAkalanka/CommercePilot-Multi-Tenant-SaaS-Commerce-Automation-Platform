@@ -5,6 +5,7 @@ import { AI_ADAPTER } from './adapters/ai-adapter.interface';
 import { IntentDetectorService } from './pipeline/intent-detector.service';
 import { ProductRetrieverService } from './pipeline/product-retriever.service';
 import { QueryNormalizerService } from './pipeline/query-normalizer.service';
+import { SoftAlternativesService } from './soft-alternatives.service';
 import { EntityExtractorService } from './pipeline/entity-extractor.service';
 import { ConfidenceScorerService } from './pipeline/confidence-scorer.service';
 import { UnfulfilledDemandService } from './unfulfilled-demand.service';
@@ -41,6 +42,8 @@ describe('AiEngineService', () => {
 
   // Pass-through by default: these tests cover pipeline orchestration, not
   // translation. QueryNormalizerService has its own suite.
+  const mockSoftAlternatives = { build: jest.fn().mockReturnValue(null) };
+
   const mockQueryNormalizer = {
     normalize: jest.fn((m: string) => Promise.resolve(m)),
   };
@@ -80,6 +83,12 @@ describe('AiEngineService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AI_ADAPTER, useValue: mockAi },
         { provide: QueryNormalizerService, useValue: mockQueryNormalizer },
+        {
+          // Off by default here: 2.5 has its own suite, and these tests are
+          // about pipeline orchestration.
+          provide: SoftAlternativesService,
+          useValue: mockSoftAlternatives,
+        },
         { provide: IntentDetectorService, useValue: mockIntentDetector },
         { provide: ProductRetrieverService, useValue: mockProductRetriever },
         { provide: EntityExtractorService, useValue: mockEntityExtractor },
@@ -490,6 +499,71 @@ describe('AiEngineService', () => {
         expect.anything(),
         expect.anything(),
       );
+    });
+  });
+
+  describe('soft alternatives (Phase 2 item 2.5)', () => {
+    it('offers alternatives built from the products retrieval already fetched', async () => {
+      // Same signal UnfulfilledDemand uses — an item with no matched product —
+      // but aimed at the customer rather than the shop.
+      mockIntentDetector.detect.mockResolvedValue({
+        intent: 'ORDER',
+        confidence: 0.9,
+      });
+      mockProductRetriever.retrieve.mockResolvedValue({
+        products: [
+          { id: 'p1', name: 'Blue Shirt', price: 1500, stockQuantity: 4 },
+        ],
+        catalogContext: 'ctx',
+      });
+      mockEntityExtractor.extract.mockResolvedValue({
+        items: [{ matched_product_id: null, product_query: 'red shoes' }],
+        missing_fields: [],
+      });
+      mockSoftAlternatives.build.mockReturnValue('here are some options');
+
+      const result = await service.processMessage({
+        tenantId: 'tenant-1',
+        customerId: 'cust-1',
+        messageId: 'msg-1',
+        messageText: 'I want red shoes',
+        autoApproveEnabled: false,
+        autoApproveThreshold: 0.95,
+        aiConfidenceThreshold: 0.8,
+      });
+
+      expect(mockSoftAlternatives.build).toHaveBeenCalledWith(
+        'red shoes',
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'Blue Shirt' }),
+        ]),
+      );
+      expect(result.softAlternatives).toBe('here are some options');
+    });
+
+    it('offers nothing when every item matched a product', async () => {
+      // A successful order must not be interrupted with alternatives.
+      mockIntentDetector.detect.mockResolvedValue({
+        intent: 'ORDER',
+        confidence: 0.9,
+      });
+      mockEntityExtractor.extract.mockResolvedValue({
+        items: [{ matched_product_id: 'p1', product_query: 'blue shirt' }],
+        missing_fields: [],
+      });
+
+      const result = await service.processMessage({
+        tenantId: 'tenant-1',
+        customerId: 'cust-1',
+        messageId: 'msg-1',
+        messageText: 'I want a blue shirt',
+        autoApproveEnabled: false,
+        autoApproveThreshold: 0.95,
+        aiConfidenceThreshold: 0.8,
+      });
+
+      expect(mockSoftAlternatives.build).not.toHaveBeenCalled();
+      expect(result.softAlternatives).toBeNull();
     });
   });
 });
