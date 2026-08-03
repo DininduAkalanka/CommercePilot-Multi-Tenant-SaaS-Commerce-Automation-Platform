@@ -200,6 +200,44 @@ export const productsApi = {
   deleteProduct: (id: string) => api.delete(`/products/${id}`),
 };
 
+/**
+ * Per-combination stock (Phase 1).
+ *
+ * Nested under a product because a variant has no meaning without one — the
+ * backend routes are /products/:productId/variants for the same reason.
+ */
+export const variantsApi = {
+  getVariants: (productId: string) =>
+    api.get(`/products/${productId}/variants`),
+
+  createVariant: (
+    productId: string,
+    data: {
+      attributes: Record<string, unknown>;
+      sku?: string | null;
+      price?: number | null;
+      stockQuantity?: number;
+      isActive?: boolean;
+    },
+  ) => api.post(`/products/${productId}/variants`, data),
+
+  updateVariant: (
+    productId: string,
+    variantId: string,
+    data: Partial<{
+      attributes: Record<string, unknown>;
+      sku: string | null;
+      price: number | null;
+      stockQuantity: number;
+      isActive: boolean;
+    }>,
+  ) => api.patch(`/products/${productId}/variants/${variantId}`, data),
+
+  deleteVariant: (productId: string, variantId: string) =>
+    api.delete(`/products/${productId}/variants/${variantId}`),
+};
+
+
 // ── WhatsApp Simulator API ────────────────────────────────────────
 export const simulatorApi = {
   sendMessage: (data: { phone: string; message: string }) =>

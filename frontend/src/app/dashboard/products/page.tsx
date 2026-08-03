@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import VariantsModal from '@/components/VariantsModal';
 import {
   Package,
   Plus,
@@ -32,6 +33,9 @@ export default function ProductsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Per-combination stock (Phase 1) — opened per product.
+  const [variantsFor, setVariantsFor] = useState<Product | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -229,6 +233,9 @@ export default function ProductsPage() {
                       <button className="btn btn-ghost btn-icon" style={{ width: 32, height: 32 }} onClick={() => openModal(product)} aria-label="Edit product">
                         <Edit2 size={14} />
                       </button>
+                      <button className="btn btn-ghost btn-icon" style={{ width: 32, height: 32 }} onClick={() => setVariantsFor(product)} aria-label={`Manage variants for ${product.name}`} title="Variants">
+                        <Database size={14} />
+                      </button>
                       <button className="btn btn-ghost btn-icon" style={{ width: 32, height: 32, color: 'var(--danger)' }} onClick={() => { setDeleteError(''); setDeleteTarget({ id: product.id, name: product.name }); }} aria-label="Delete product">
                         <Trash2 size={14} />
                       </button>
@@ -239,6 +246,15 @@ export default function ProductsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {variantsFor && (
+        <VariantsModal
+          productId={variantsFor.id}
+          productName={variantsFor.name}
+          productStock={variantsFor.stockQuantity}
+          onClose={() => { setVariantsFor(null); void fetchProducts(); }}
+        />
       )}
 
       {/* Modal */}

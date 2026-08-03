@@ -13,7 +13,7 @@
 |---|---|
 | **Pre-work** — audit remediation | ✅ Complete · merged · live |
 | **Phase 0** — Instrument & measure | ✅ Complete · merged · live |
-| **Phase 1** — `ProductVariant` | 🟡 PR1 merged · PR2+PR3 built · PR4 remains |
+| **Phase 1** — `ProductVariant` | 🟡 PR1-PR3 merged · management UI built · PR4 remains |
 | **Phase 2** — Stop losing orders | ✅ 6 of 6 · 2.5 / 2.6 built |
 | **Phase 3** — Sinhala / Singlish | 🟡 Query normalisation merged · tuning blocked on eval dataset |
 | **Phase 4** — Voice & images | ⬜ Not started |
@@ -177,6 +177,16 @@ WooCommerce with no size/colour.
       `ProductsModule` imports `AiEngineModule`, so `AiEngineModule` importing
       products back would have been a dependency cycle. Unit tests passed
       regardless — only a container boot caught it.
+- [x] **Variant management UI** — not in the original 4-PR plan, and that was
+      an omission: PR1-PR3 are all backend, so per-combination stock was
+      unreachable to a shop owner. Only SQL or a WooCommerce sync could create
+      a real variant, which meant three merged PRs delivered no usable feature.
+      **Built** — `ProductVariantController`
+      (`/products/:productId/variants`, GET/POST/PATCH/DELETE) plus a
+      `VariantsModal` on the products page. Options are entered as name/value
+      rows, not raw JSON — a shop owner should not hand-write JSON to record
+      stock. Shows a note when variant totals and the product total disagree,
+      since that is the first sign the mirror has drifted.
 - [ ] **PR4 Contract** — `Product.stockQuantity` becomes a maintained rollup.
       *Do this days after PR3.*
 - [ ] **WooCommerce** — fetch variations (N+1, only for `type === 'variable'`,
