@@ -3,6 +3,7 @@ import { PrismaService } from '../../../common/database/prisma.service';
 import { AI_ADAPTER } from '../adapters/ai-adapter.interface';
 import type { AiAdapter } from '../adapters/ai-adapter.interface';
 import { EMBEDDING_PROVIDER } from '../adapters/embedding-provider.interface';
+import { ProductVariantService } from '../../products/product-variant.service';
 import type { EmbeddingProvider } from '../adapters/embedding-provider.interface';
 import { AIProcessingStage } from '@prisma/client';
 
@@ -48,6 +49,7 @@ export class ProductRetrieverService {
     // different vendors, and the text provider may have no embedding models.
     @Inject(EMBEDDING_PROVIDER)
     private readonly embeddings: EmbeddingProvider,
+    private readonly variants: ProductVariantService,
   ) {}
 
   /**
@@ -92,6 +94,8 @@ export class ProductRetrieverService {
     }
 
     const processingTimeMs = Date.now() - startTime;
+    // PR3: quote the same stock the validator will enforce.
+    products = await this.applyVariantStock(tenantId, products);
     const catalogContext = this.formatCatalogContext(products);
 
     // Log this AI processing stage
@@ -328,6 +332,34 @@ export class ProductRetrieverService {
       price: parseFloat(p.price.toString()),
       stockQuantity: p.stockQuantity,
       attributes: p.attributes as Record<string, unknown> | null,
+    }));
+  }
+
+  /**
+   * Overwrite the retrieved stock figures with variant stock (PR3).
+   *
+   * The catalogue context is what the AI quotes back to the customer. If it
+   * showed product totals while order validation enforced variant stock, the
+   * AI would promise an item and creation would then reject it — the worst of
+   * both. One batch query, and every entry falls back to the product value.
+   */
+  private async applyVariantStock(
+    tenantId: string,
+    products: RetrievedProduct[],
+  ): Promise<RetrievedProduct[]> {
+    if (products.length === 0) return products;
+
+    const stock = await this.variants.resolveStockMany(
+      tenantId,
+      products.map((p) => ({
+        productId: p.id,
+        fallbackStock: p.stockQuantity,
+      })),
+    );
+
+    return products.map((p) => ({
+      ...p,
+      stockQuantity: stock.get(p.id) ?? p.stockQuantity,
     }));
   }
 

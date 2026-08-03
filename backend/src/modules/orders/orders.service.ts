@@ -10,6 +10,7 @@ import { Subject, Observable } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../common/database/prisma.service';
+import { ProductVariantService } from '../products/product-variant.service';
 import {
   OrderStatus,
   AIDraftStatus,
@@ -35,6 +36,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly variants: ProductVariantService,
   ) {}
 
   private readonly sse$ = new Subject<{
@@ -552,6 +554,17 @@ export class OrdersService {
 
     const productMap = new Map(products.map((p) => [p.id, p]));
 
+    // Phase 1 PR3: read stock from the variant mirror when enabled. Resolved
+    // in one batch, and every entry falls back to the product's own stock, so
+    // with VARIANT_STOCK_ENABLED unset this behaves exactly as before.
+    const stockByProduct = await this.variants.resolveStockMany(
+      tenantId,
+      products.map((p) => ({
+        productId: p.id,
+        fallbackStock: p.stockQuantity,
+      })),
+    );
+
     for (const item of items) {
       if (!item.productId) continue;
 
@@ -561,10 +574,12 @@ export class OrdersService {
         throw new BadRequestException(`Product not found: ${item.productId}`);
       }
 
-      if (product.stockQuantity < item.quantity) {
+      const available = stockByProduct.get(product.id) ?? product.stockQuantity;
+
+      if (available < item.quantity) {
         throw new BadRequestException(
           `Insufficient stock for "${product.name}". ` +
-            `Available: ${product.stockQuantity}, Requested: ${item.quantity}`,
+            `Available: ${available}, Requested: ${item.quantity}`,
         );
       }
     }

@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ProductVariantService } from '../products/product-variant.service';
 import { OrdersService } from './orders.service';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -6,6 +7,16 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { AIDraftStatus, OrderStatus } from '@prisma/client';
 
 describe('OrdersService', () => {
+  // Pass-through by default: PR3 stock resolution has its own suite.
+  const mockVariants = {
+    resolveStockMany: jest.fn(
+      (_t: string, items: { productId: string; fallbackStock: number }[]) =>
+        Promise.resolve(
+          new Map(items.map((i) => [i.productId, i.fallbackStock])),
+        ),
+    ),
+  };
+
   let service: OrdersService;
 
   const mockPrisma = {
@@ -59,6 +70,10 @@ describe('OrdersService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
+        {
+          provide: ProductVariantService,
+          useValue: mockVariants,
+        },
         { provide: PrismaService, useValue: mockPrisma },
         { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
@@ -411,6 +426,60 @@ describe('OrdersService', () => {
       expect(result.approvalRate).toBe(50);
       expect(result.statusBreakdown[OrderStatus.APPROVED]).toBe(1);
       expect(result.statusBreakdown[OrderStatus.SYNCED]).toBe(1);
+    });
+  });
+
+  describe('variant stock reads (Phase 1 PR3)', () => {
+    beforeEach(() => {
+      // The product itself has plenty; only the variant is short.
+      mockPrisma.product.findMany.mockResolvedValue([
+        { id: 'prod-1', name: 'Blue Shirt', stockQuantity: 12 },
+      ]);
+    });
+
+    it('rejects an order when the VARIANT stock is short, even if the product total is not', async () => {
+      // The entire point of the feature: the shirt has 12 units, but blue in L
+      // has 2. Validating against the product total would accept an order the
+      // shop cannot ship.
+      mockVariants.resolveStockMany.mockResolvedValueOnce(
+        new Map([['prod-1', 2]]),
+      );
+
+      await expect(
+        (
+          service as unknown as {
+            validateStock: (t: string, i: unknown[]) => Promise<void>;
+          }
+        ).validateStock('tenant-1', [{ productId: 'prod-1', quantity: 5 }]),
+      ).rejects.toThrow(/Insufficient stock/);
+    });
+
+    it('reports the variant figure to the customer, not the product total', async () => {
+      mockVariants.resolveStockMany.mockResolvedValueOnce(
+        new Map([['prod-1', 2]]),
+      );
+
+      await expect(
+        (
+          service as unknown as {
+            validateStock: (t: string, i: unknown[]) => Promise<void>;
+          }
+        ).validateStock('tenant-1', [{ productId: 'prod-1', quantity: 5 }]),
+      ).rejects.toThrow(/Available: 2/);
+    });
+
+    it('accepts the order when the variant has enough', async () => {
+      mockVariants.resolveStockMany.mockResolvedValueOnce(
+        new Map([['prod-1', 50]]),
+      );
+
+      await expect(
+        (
+          service as unknown as {
+            validateStock: (t: string, i: unknown[]) => Promise<void>;
+          }
+        ).validateStock('tenant-1', [{ productId: 'prod-1', quantity: 5 }]),
+      ).resolves.not.toThrow();
     });
   });
 });

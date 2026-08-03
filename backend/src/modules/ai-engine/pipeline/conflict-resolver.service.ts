@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { AI_ADAPTER } from '../adapters/ai-adapter.interface';
+import { ProductVariantService } from '../../products/product-variant.service';
 import type { AiAdapter } from '../adapters/ai-adapter.interface';
 import {
   STOCK_CONFLICT_RESOLUTION_PROMPT,
@@ -42,6 +43,7 @@ export class ConflictResolverService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(AI_ADAPTER) private readonly ai: AiAdapter,
+    private readonly variants: ProductVariantService,
   ) {}
 
   /**
@@ -80,18 +82,31 @@ export class ConflictResolverService {
 
     const productMap = new Map(products.map((p) => [p.id, p]));
 
+    // Phase 1 PR3: same source of truth as order validation. If these two
+    // disagreed, the AI would tell a customer an item is available and the
+    // order would then be rejected at creation — the worst of both.
+    const stockByProduct = await this.variants.resolveStockMany(
+      tenantId,
+      products.map((p) => ({
+        productId: p.id,
+        fallbackStock: p.stockQuantity,
+      })),
+    );
+
     // Find conflicts: requested > available
     const conflicts: StockConflict[] = [];
     for (const item of itemsWithProducts) {
       const product = productMap.get(item.productId as string);
       if (!product) continue;
 
-      if (item.quantity > product.stockQuantity) {
+      const available = stockByProduct.get(product.id) ?? product.stockQuantity;
+
+      if (item.quantity > available) {
         conflicts.push({
           productId: product.id,
           productName: product.name,
           requested: item.quantity,
-          available: product.stockQuantity,
+          available,
         });
       }
     }
