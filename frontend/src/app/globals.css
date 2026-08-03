@@ -422,7 +422,7 @@ label { font-size: 0.8125rem; font-weight: 500; color: var(--ink-2); }
 /* ═══════════════════════════════════════════════════════════════════
    RESPONSIVE BASE
    ═══════════════════════════════════════════════════════════════════ */
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .data-table th { display: none; }
   .data-table, .data-table tbody, .data-table tr, .data-table td { display: block; width: 100%; }
   .data-table tbody tr {
@@ -440,5 +440,56 @@ label { font-size: 0.8125rem; font-weight: 500; color: var(--ink-2); }
     content: attr(data-label);
     font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.05em;
     text-transform: uppercase; color: var(--ink-3); text-align: left;
+  }
+}
+
+/*
+ * Anything genuinely too wide to reflow — a chart, a code block — scrolls
+ * inside its own container rather than pushing the page sideways. Without
+ * this a single wide child makes the entire dashboard scroll horizontally,
+ * which on a phone feels broken rather than scrollable.
+ */
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Nothing may exceed the viewport width. The usual culprits are long unbroken
+ * strings — order ids, SKUs, email addresses — which have no break opportunity
+ * and so force the layout wider than the screen. */
+@media (max-width: 900px) {
+  .page,
+  .card {
+    max-width: 100%;
+  }
+
+  .card,
+  .data-table td,
+  .data-table th {
+    overflow-wrap: anywhere;
+  }
+}
+
+/*
+ * Touch targets. The base button is 9px/16px padding, which lands around
+ * 28-38px tall — fine with a mouse, a miss-and-retry with a thumb. 44px is
+ * the accepted minimum, applied only on touch-sized viewports so the desktop
+ * density is unchanged.
+ */
+@media (max-width: 900px) {
+  .btn,
+  .btn-icon,
+  .input,
+  select {
+    min-height: 44px;
+  }
+
+  .btn-icon {
+    min-width: 44px;
+  }
+
+  /* The account chip is a button but carries no .btn class. */
+  .user-chip {
+    min-height: 44px;
   }
 }

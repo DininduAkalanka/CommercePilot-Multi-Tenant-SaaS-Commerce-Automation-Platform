@@ -80,6 +80,13 @@ export class ProductRetrieverService {
 
     let products: RetrievedProduct[];
 
+    // Recorded so the metrics dashboard reports what actually ran. This used
+    // to log a hardcoded 'text-embedding-004' regardless — a model that is
+    // now retired and, with no embedding provider configured, never called.
+    // A dashboard naming a model that did not run misleads exactly the
+    // debugging it exists to support.
+    let searchMethod = 'vector-search';
+
     try {
       // Try vector search first (requires pgvector + product embeddings)
       products = await this.vectorSearch(tenantId, searchText);
@@ -87,10 +94,12 @@ export class ProductRetrieverService {
       if (products.length === 0) {
         // Fallback to text-based search
         products = await this.textSearch(tenantId, searchText);
+        searchMethod = 'text-search';
       }
     } catch (error) {
       this.logger.warn(`Vector search failed, using text search: ${error}`);
       products = await this.textSearch(tenantId, searchText);
+      searchMethod = 'text-search-after-vector-error';
     }
 
     const processingTimeMs = Date.now() - startTime;
@@ -109,7 +118,7 @@ export class ProductRetrieverService {
           productsFound: products.length,
           productIds: products.map((p) => p.id),
         },
-        modelUsed: 'text-embedding-004',
+        modelUsed: searchMethod,
         promptVersion: '1.0.0',
         processingTimeMs,
         success: true,

@@ -271,9 +271,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <>
                   <div onClick={() => setNotifOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 49 }} />
                   <div
-                    className="animate-fade-in"
+                    className="animate-fade-in header-panel"
                     style={{
-                      position: 'absolute', top: 46, right: 0, width: 340, maxWidth: 'calc(100vw - 32px)',
+                      position: 'absolute', top: 46, right: 0, width: 340,
                       background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)',
                       boxShadow: 'var(--shadow-lg)', zIndex: 50, overflow: 'hidden',
                     }}
@@ -333,10 +333,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <>
                   <div onClick={() => setAccountOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 49 }} />
                   <div
-                    className="animate-fade-in"
+                    className="animate-fade-in header-panel"
                     role="menu"
                     style={{
-                      position: 'absolute', top: 46, right: 0, width: 260, maxWidth: 'calc(100vw - 32px)',
+                      position: 'absolute', top: 46, right: 0, width: 260,
                       background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)',
                       boxShadow: 'var(--shadow-lg)', zIndex: 50, overflow: 'hidden',
                     }}
@@ -438,6 +438,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .account-item:hover { background: var(--surface-3); color: var(--ink); }
         .account-item-danger { color: var(--danger); }
         .account-item-danger:hover { background: var(--danger-soft); color: var(--danger); }
+        /*
+         * Header panels (notifications, account) are anchored to the button
+         * with right:0 and sized in viewport units. On a narrow screen that
+         * combination pushes the panel's LEFT edge off-screen — measured at
+         * -254px on a 360px viewport, which clipped the first character of
+         * every line.
+         *
+         * Below the tablet breakpoint they become viewport-anchored instead,
+         * so they can never escape the screen regardless of where the trigger
+         * sits.
+         */
+        @media (max-width: 767px) {
+          .header-panel {
+            position: fixed !important;
+            top: 60px !important;
+            left: 12px !important;
+            right: 12px !important;
+            width: auto !important;
+            max-height: calc(100vh - 84px);
+            overflow-y: auto;
+          }
+        }
+
+        /*
+         * Touch targets. 44px is the accepted minimum for a reliable tap; the
+         * nav links measured 39px high and both menu buttons 32-38px square,
+         * which is a miss-and-retry on a real phone.
+         */
+        @media (max-width: 767px) {
+          .nav-link {
+            min-height: 44px;
+          }
+          .mobile-menu-btn,
+          .mobile-close {
+            min-width: 44px !important;
+            min-height: 44px !important;
+          }
+        }
         @media (max-width: 767px) {
           .desktop-sidebar { display: none !important; }
           .mobile-menu-btn { display: inline-flex !important; }

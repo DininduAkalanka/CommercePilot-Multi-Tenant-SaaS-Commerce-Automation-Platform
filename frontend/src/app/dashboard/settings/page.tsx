@@ -191,7 +191,7 @@ export default function SettingsPage() {
           <h1>Settings</h1>
           <div className="sub">Manage your business preferences and integrations</div>
         </div>
-        <div className="row" style={{ gap: 10 }}>
+        <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
           {settings && (
             <span className="badge badge-approved">
               <span style={{ width: 6, height: 6, background: 'var(--brand)', borderRadius: '50%' }} />

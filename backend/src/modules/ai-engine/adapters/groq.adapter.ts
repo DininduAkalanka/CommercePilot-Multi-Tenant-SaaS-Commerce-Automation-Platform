@@ -6,6 +6,7 @@ import {
   AiResponse,
   parseJsonFromModelText,
 } from './ai-adapter.interface';
+import { buildMockResponse } from './mock-ai';
 
 /**
  * GroqAdapter
@@ -56,7 +57,7 @@ export class GroqAdapter implements AiAdapter {
       );
 
       return {
-        text: this.mockResponse(userPrompt),
+        text: buildMockResponse(systemPrompt, userPrompt),
         modelUsed: 'mock-groq',
         processingTimeMs: Date.now() - startTime,
         tokenCount: 0,
@@ -226,29 +227,6 @@ export class GroqAdapter implements AiAdapter {
 
     // Network errors and aborts have no status and are worth one more try.
     return true;
-  }
-
-  /**
-   * Canned response so the pipeline runs without credentials. Intentionally
-   * crude — it exists so contributors can boot the stack, not to simulate the
-   * model. Anything measured against it is meaningless, which `npm run eval`
-   * warns about explicitly.
-   */
-  private mockResponse(userPrompt: string): string {
-    const message = userPrompt.toLowerCase();
-    const looksLikeOrder =
-      message.includes('order') ||
-      message.includes('buy') ||
-      message.includes('want') ||
-      message.includes('one') || // "ekak one" — Singlish "I want one"
-      message.includes('denna'); // Singlish "give me"
-
-    return JSON.stringify({
-      intent: looksLikeOrder ? 'ORDER' : 'INQUIRY',
-      items: [],
-      confidence: 0.5,
-      _mock: true,
-    });
   }
 }
 

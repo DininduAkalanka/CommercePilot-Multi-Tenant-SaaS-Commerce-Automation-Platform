@@ -1,0 +1,453 @@
+// ─────────────────────────────────────────────────────────
+// CommercePilot — database schema
+// Multi-tenant SaaS: every business-owned table carries tenantId.
+//
+// Generated from prisma/schema.prisma. Paste into https://dbdiagram.io
+// ─────────────────────────────────────────────────────────
+
+Table tenants {
+  id uuid [pk, default: `uuid()`]
+  name varchar [not null]
+  slug varchar [unique, not null]
+  plan TenantPlan [not null, default: `STARTER`]
+  isActive boolean [not null, default: `true`]
+  whatsappPhoneNumberId varchar
+  whatsappAccessToken varchar
+  whatsappVerifyToken varchar
+  whatsappProvider WhatsAppProvider [not null, default: `MOCK`]
+  woocommerceUrl varchar
+  woocommerceKey varchar
+  woocommerceSecret varchar
+  woocommerceProvider EcommerceProvider [not null, default: `MOCK`]
+  aiConfidenceThreshold float [not null, default: `0.85`]
+  autoApproveEnabled boolean [not null, default: `false`]
+  autoApproveThreshold float [not null, default: `0.95`]
+  businessHours jsonb
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+  deletedAt timestamp
+}
+
+Table users {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  name varchar [not null]
+  email varchar [not null]
+  passwordHash varchar [not null]
+  role UserRole [not null, default: `STAFF`]
+  isActive boolean [not null, default: `true`]
+  lastLogin timestamp
+  refreshTokenHash varchar
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+  deletedAt timestamp
+}
+
+Table customers {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  name varchar
+  phone varchar [not null]
+  email varchar
+  address varchar
+  totalOrders int [not null, default: `0`]
+  lifetimeValue decimal(12,2) [not null, default: `0`]
+  isBlocked boolean [not null, default: `false`]
+  whatsappProfileName varchar
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+  deletedAt timestamp
+}
+
+Table products {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  name varchar [not null]
+  description varchar
+  sku varchar
+  price decimal(12,2) [not null]
+  stockQuantity int [not null, default: `0`]
+  isActive boolean [not null, default: `true`]
+  attributes jsonb
+  woocommerceId varchar
+  shopifyId varchar
+  embedding vector(768)
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+  deletedAt timestamp
+}
+
+Table product_variants {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  productId uuid [not null]
+  attributes jsonb [not null]
+  attributeKey varchar [not null]
+  sku varchar
+  price decimal(12,2)
+  stockQuantity int [not null, default: `0`]
+  isActive boolean [not null, default: `true`]
+  woocommerceId varchar
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+  deletedAt timestamp
+}
+
+Table orders {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  customerId uuid [not null]
+  orderNumber varchar [not null]
+  status OrderStatus [not null, default: `PENDING_AI`]
+  totalAmount decimal(12,2) [not null, default: `0`]
+  aiConfidenceScore float
+  source OrderSource [not null, default: `WHATSAPP`]
+  deliveryAddress varchar
+  requestedDate timestamp
+  notes varchar
+  woocommerceOrderId varchar
+  shopifyOrderId varchar
+  syncedAt timestamp
+  reviewedByUserId uuid
+  reviewedAt timestamp
+  reviewNotes varchar
+  aiDraftOrderId uuid [unique]
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+  deletedAt timestamp
+}
+
+Table order_items {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  orderId uuid [not null]
+  productId uuid [not null]
+  variantId uuid
+  quantity int [not null]
+  unitPrice decimal(12,2) [not null]
+  subtotal decimal(12,2) [not null]
+  selectedAttributes jsonb
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+  deletedAt timestamp
+}
+
+Table whatsapp_messages {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  customerId uuid
+  phone varchar [not null]
+  messageText varchar
+  direction MessageDirection [not null]
+  messageType MessageType [not null, default: `TEXT`]
+  status MessageStatus [not null, default: `RECEIVED`]
+  externalMessageId varchar [unique]
+  mediaUrl varchar
+  mediaType varchar
+  referral jsonb
+  aiProcessed boolean [not null, default: `false`]
+  aiProcessedAt timestamp
+  aiProcessingLogId uuid
+  sentAt timestamp
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+  conversationId uuid
+}
+
+Table conversations {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  customerId uuid [not null]
+  phone varchar [not null]
+  status ConversationStatus [not null, default: `ACTIVE`]
+  currentStage ConversationStage [not null, default: `ACTIVE`]
+  partialOrderData jsonb
+  startedAt timestamp [not null, default: `now()`]
+  lastMessageAt timestamp [not null, default: `now()`]
+  endedAt timestamp
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+}
+
+Table ai_processing_logs {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  messageId uuid
+  stage AIProcessingStage [not null]
+  inputData jsonb [not null]
+  outputData jsonb [not null]
+  modelUsed varchar [not null]
+  promptVersion varchar [not null, default: `"1.0.0"`]
+  processingTimeMs int [not null]
+  tokenCount int
+  intentConfidence float
+  productMatchConfidence float
+  completenessScore float
+  overallConfidence float
+  success boolean [not null, default: `true`]
+  errorMessage varchar
+  createdAt timestamp [not null, default: `now()`]
+}
+
+Table ai_draft_orders {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  customerId uuid [not null]
+  messageId uuid
+  customerMessage varchar [not null]
+  structuredData jsonb [not null]
+  intentConfidence float [not null]
+  productMatchConfidence float [not null]
+  completenessScore float [not null]
+  overallConfidence float [not null]
+  status AIDraftStatus [not null, default: `PENDING`]
+  humanCorrections jsonb
+  correctedByUserId uuid
+  correctedAt timestamp
+  duplicateOfId uuid
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+  deletedAt timestamp
+}
+
+Table ai_draft_order_items {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  draftOrderId uuid [not null]
+  productId uuid
+  variantId uuid
+  productQuery varchar [not null]
+  matchedProductName varchar
+  matchConfidence float
+  quantity int [not null]
+  unitPrice decimal(12,2)
+  selectedAttributes jsonb
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+}
+
+Table inventory_transactions {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  productId uuid [not null]
+  type InventoryTxType [not null]
+  quantity int [not null]
+  referenceOrderId uuid
+  notes varchar
+  createdAt timestamp [not null, default: `now()`]
+}
+
+Table notifications {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  userId uuid
+  type NotificationType [not null]
+  channel NotificationChannel [not null]
+  title varchar [not null]
+  message varchar [not null]
+  status NotificationStatus [not null, default: `PENDING`]
+  metadata jsonb
+  sentAt timestamp
+  failedAt timestamp
+  failReason varchar
+  retryCount int [not null, default: `0`]
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+}
+
+Table unfulfilled_demand {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  customerId uuid
+  messageId uuid
+  query varchar [not null]
+  normalizedQuery varchar [not null]
+  reason UnfulfilledReason [not null]
+  createdAt timestamp [not null, default: `now()`]
+}
+
+Table audit_logs {
+  id uuid [pk, default: `uuid()`]
+  tenantId uuid [not null]
+  actorUserId uuid
+  actorType varchar [not null, default: `"USER"`]
+  action varchar [not null]
+  entityType varchar [not null]
+  entityId uuid [not null]
+  beforeState jsonb
+  afterState jsonb
+  ipAddress varchar
+  userAgent varchar
+  correlationId varchar
+  timestamp timestamp [not null, default: `now()`]
+}
+
+// ── Relationships ────────────────────────────────────────
+// > many-to-one   - one-to-one
+
+Ref: users.tenantId > tenants.id
+Ref: customers.tenantId > tenants.id
+Ref: products.tenantId > tenants.id
+Ref: product_variants.tenantId > tenants.id
+Ref: product_variants.productId > products.id
+Ref: orders.tenantId > tenants.id
+Ref: orders.customerId > customers.id
+Ref: orders.aiDraftOrderId > ai_draft_orders.id
+Ref: order_items.tenantId > tenants.id
+Ref: order_items.orderId > orders.id
+Ref: order_items.productId > products.id
+Ref: whatsapp_messages.tenantId > tenants.id
+Ref: whatsapp_messages.customerId > customers.id
+Ref: whatsapp_messages.conversationId > conversations.id
+Ref: conversations.tenantId > tenants.id
+Ref: conversations.customerId > customers.id
+Ref: ai_processing_logs.tenantId > tenants.id
+Ref: ai_processing_logs.messageId > whatsapp_messages.id
+Ref: ai_draft_orders.duplicateOfId > ai_draft_orders.id  // DraftDuplicate
+Ref: ai_draft_orders.tenantId > tenants.id
+Ref: ai_draft_orders.customerId > customers.id
+Ref: ai_draft_order_items.tenantId > tenants.id
+Ref: ai_draft_order_items.draftOrderId > ai_draft_orders.id
+Ref: ai_draft_order_items.productId > products.id
+Ref: inventory_transactions.tenantId > tenants.id
+Ref: inventory_transactions.productId > products.id
+Ref: notifications.tenantId > tenants.id
+Ref: notifications.userId > users.id
+Ref: unfulfilled_demand.tenantId > tenants.id
+Ref: audit_logs.tenantId > tenants.id
+Ref: audit_logs.actorUserId > users.id
+
+// ── Enums ────────────────────────────────────────────────
+
+Enum TenantPlan {
+  STARTER
+  BUSINESS
+  ENTERPRISE
+}
+
+Enum UserRole {
+  SUPER_ADMIN
+  OWNER
+  STAFF
+}
+
+Enum OrderStatus {
+  PENDING_AI
+  WAITING_APPROVAL
+  APPROVED
+  REJECTED
+  SYNCED
+  FAILED
+  CANCELLED
+}
+
+Enum OrderSource {
+  WHATSAPP
+  MANUAL
+  API
+}
+
+Enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+Enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  STICKER
+  LOCATION
+}
+
+Enum MessageStatus {
+  RECEIVED
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+Enum ConversationStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+  BLOCKED
+}
+
+Enum ConversationStage {
+  ACTIVE
+  GATHERING_INFO
+  CONFIRMING
+  PENDING_ORDER
+  CLOSED
+  ABANDONED
+}
+
+Enum AIProcessingStage {
+  INTENT_DETECTION
+  PRODUCT_RETRIEVAL
+  ENTITY_EXTRACTION
+  CONFIDENCE_SCORING
+  DRAFT_ORDER_GENERATION
+  CONFLICT_RESOLUTION
+}
+
+Enum AIDraftStatus {
+  PENDING
+  REVIEWED
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+Enum InventoryTxType {
+  IN
+  OUT
+  ADJUSTMENT
+  RETURN
+}
+
+Enum NotificationType {
+  ORDER_PENDING_APPROVAL
+  ORDER_APPROVED
+  ORDER_REJECTED
+  ORDER_SYNCED
+  LOW_STOCK_ALERT
+  AI_PROCESSING_FAILED
+  CUSTOMER_CONFIRMATION
+  SYSTEM_ALERT
+}
+
+Enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+  SYSTEM
+}
+
+Enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+Enum UnfulfilledReason {
+  NO_CATALOG_MATCH
+  EMPTY_CATALOG
+  OUT_OF_STOCK
+}
+
+Enum WhatsAppProvider {
+  MOCK
+  META_CLOUD_API
+}
+
+Enum EcommerceProvider {
+  MOCK
+  WOOCOMMERCE
+  SHOPIFY
+}

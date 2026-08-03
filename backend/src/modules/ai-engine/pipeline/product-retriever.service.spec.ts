@@ -275,4 +275,35 @@ describe('ProductRetrieverService', () => {
       expect(result.products).toEqual([]);
     });
   });
+
+  describe('metrics honesty', () => {
+    it('records text-search when no embedding was available', async () => {
+      // The dashboard groups by modelUsed. Reporting an embedding model that
+      // never ran made it look like semantic search was working when the
+      // provider was unconfigured — the opposite of what observability is for.
+      mockEmbeddings.generateEmbedding.mockResolvedValue(null);
+      mockPrisma.product.findMany.mockResolvedValue([]);
+
+      await service.retrieve('tenant-1', 'msg-1', 'blue shirt');
+
+      expect(mockPrisma.aIProcessingLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ modelUsed: 'text-search' }),
+        }),
+      );
+    });
+
+    it('never reports a retired embedding model', async () => {
+      mockEmbeddings.generateEmbedding.mockResolvedValue(null);
+      mockPrisma.product.findMany.mockResolvedValue([]);
+
+      await service.retrieve('tenant-1', 'msg-1', 'blue shirt');
+
+      const logged = mockPrisma.aIProcessingLog.create.mock.calls
+        .map((c) => c[0]?.data?.modelUsed)
+        .filter(Boolean);
+
+      expect(logged).not.toContain('text-embedding-004');
+    });
+  });
 });
