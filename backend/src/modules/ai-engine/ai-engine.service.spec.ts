@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AiEngineService } from './ai-engine.service';
 import { PrismaService } from '../../common/database/prisma.service';
-import { GeminiAdapter } from './adapters/gemini.adapter';
+import { AI_ADAPTER } from './adapters/ai-adapter.interface';
 import { IntentDetectorService } from './pipeline/intent-detector.service';
 import { ProductRetrieverService } from './pipeline/product-retriever.service';
 import { EntityExtractorService } from './pipeline/entity-extractor.service';
@@ -33,7 +33,7 @@ describe('AiEngineService', () => {
     $transaction: jest.fn(),
   };
 
-  const mockGemini = {
+  const mockAi = {
     generateContent: jest.fn(),
     generateEmbedding: jest.fn(),
   };
@@ -71,7 +71,7 @@ describe('AiEngineService', () => {
       providers: [
         AiEngineService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: GeminiAdapter, useValue: mockGemini },
+        { provide: AI_ADAPTER, useValue: mockAi },
         { provide: IntentDetectorService, useValue: mockIntentDetector },
         { provide: ProductRetrieverService, useValue: mockProductRetriever },
         { provide: EntityExtractorService, useValue: mockEntityExtractor },

@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { GeminiAdapter } from '../adapters/gemini.adapter';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { AI_ADAPTER } from '../adapters/ai-adapter.interface';
+import type { AiAdapter } from '../adapters/ai-adapter.interface';
 import { PrismaService } from '../../../common/database/prisma.service';
 import {
   INTENT_DETECTION_SYSTEM_PROMPT,
@@ -36,7 +37,7 @@ export class IntentDetectorService {
   private readonly logger = new Logger(IntentDetectorService.name);
 
   constructor(
-    private readonly gemini: GeminiAdapter,
+    @Inject(AI_ADAPTER) private readonly ai: AiAdapter,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -54,7 +55,7 @@ export class IntentDetectorService {
     const systemPrompt = INTENT_DETECTION_SYSTEM_PROMPT;
     const userPrompt = INTENT_DETECTION_USER_PROMPT(messageText);
 
-    const response = await this.gemini.generateText(systemPrompt, userPrompt, {
+    const response = await this.ai.generateText(systemPrompt, userPrompt, {
       temperature: 0.05, // Very low temperature for classification tasks
       maxOutputTokens: 256,
     });
@@ -65,7 +66,7 @@ export class IntentDetectorService {
 
     if (response.success && response.text) {
       try {
-        result = this.gemini.parseJsonResponse<IntentDetectionResult>(
+        result = this.ai.parseJsonResponse<IntentDetectionResult>(
           response.text,
         );
       } catch {
