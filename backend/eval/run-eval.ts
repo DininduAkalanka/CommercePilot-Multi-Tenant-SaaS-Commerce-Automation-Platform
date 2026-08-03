@@ -13,7 +13,8 @@
  *
  * WHY IT ONLY TALKS TO THE ADAPTER, NOT THE FULL PIPELINE
  * We are measuring how well the model reads a customer message — not database
- * plumbing. Driving GeminiAdapter directly with the production prompts keeps
+ * plumbing. Driving the CONFIGURED adapter directly with the production
+ * prompts keeps
  * the harness runnable with no Postgres, no Redis and no tenant setup, so it
  * can run anywhere including CI.
  *
@@ -25,7 +26,14 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { ConfigService } from '@nestjs/config';
+// Load .env before anything reads process.env. A standalone ConfigService
+// (no ConfigModule.forRoot) does NOT read .env, so without this the harness
+// silently measured the mock no matter which key was configured.
+import 'dotenv/config';
+
 import { GeminiAdapter } from '../src/modules/ai-engine/adapters/gemini.adapter';
+import { GroqAdapter } from '../src/modules/ai-engine/adapters/groq.adapter';
+import type { AiAdapter } from '../src/modules/ai-engine/adapters/ai-adapter.interface';
 import {
   INTENT_DETECTION_SYSTEM_PROMPT,
   INTENT_DETECTION_USER_PROMPT,
@@ -250,6 +258,37 @@ function compare(row: EvalRow, extracted: any, intent: string): FieldResult[] {
 
 // ── Runner ───────────────────────────────────────────────────────
 
+
+/**
+ * Fail loudly when the provider did not return anything usable.
+ *
+ * Without this the empty string from a failed call reaches JSON.parse and
+ * surfaces as "Unexpected end of JSON input" — indistinguishable from the
+ * model emitting malformed output. Seven of twenty-four rows failed that way
+ * on the first real run, which made a rate-limit problem look like poor
+ * extraction accuracy.
+ */
+function assertUsable(
+  res: { success: boolean; text: string; error?: string },
+  stage: string,
+): void {
+  if (!res.success) {
+    throw new Error(`${stage} call failed: ${res.error ?? 'unknown error'}`);
+  }
+
+  if (!res.text?.trim()) {
+    throw new Error(`${stage} call returned an empty response`);
+  }
+}
+
+/**
+ * The free tier rate-limits per minute, and this harness fires two calls per
+ * row as fast as it can. Pacing keeps a measurement run from measuring the
+ * rate limiter instead of the model.
+ */
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 async function main() {
   const args = process.argv.slice(2);
   const argValue = (name: string) => {
@@ -260,9 +299,15 @@ async function main() {
   const limit = Number(argValue('limit') ?? '0');
   const datasetPath = argValue('dataset') ?? 'eval/dataset.csv';
 
+  // Same default as AiEngineModule: groq unless explicitly set to gemini.
+  const provider = (process.env.AI_PROVIDER ?? 'groq').toLowerCase();
+
   const usingMock =
-    !process.env.GEMINI_API_KEY ||
-    process.env.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE';
+    provider === 'gemini'
+      ? !process.env.GEMINI_API_KEY ||
+        process.env.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE'
+      : !process.env.GROQ_API_KEY ||
+        process.env.GROQ_API_KEY === 'PASTE_YOUR_GROQ_KEY_HERE';
 
   console.log('\n═══ Extraction evaluation ═══\n');
 
@@ -284,22 +329,42 @@ async function main() {
   ) as { products: CatalogProduct[] };
   const catalogContext = formatCatalogContext(catalog.products);
 
-  // Real ConfigService so the adapter reads the same env the app would.
-  const adapter = new GeminiAdapter(new ConfigService());
+  // Mirrors AiEngineModule's AI_ADAPTER factory. Hard-coding GeminiAdapter is
+  // what made this harness report 0/24 against a working Groq key — it
+  // measured the mock while the app itself used the real provider.
+  const config = new ConfigService();
+  const adapter: AiAdapter =
+    provider === 'gemini' ? new GeminiAdapter(config) : new GroqAdapter(config);
 
   console.log(
-    `Dataset: ${datasetPath}  (${subset.length} messages, ${catalog.products.length} catalog products)\n`,
+    `Provider: ${provider}
+Dataset: ${datasetPath}  (${subset.length} messages, ${catalog.products.length} catalog products)\n`,
   );
 
   const results: RowResult[] = [];
 
+  // Groq's free tier allows 12,000 tokens/minute and one extraction call costs
+  // roughly 950 (the catalogue context dominates), so ~6 rows/minute is the
+  // ceiling. Pacing plus a longer backoff than the app's default keeps a
+  // measurement run from measuring the rate limiter instead of the model.
+  const pauseMs = Number(process.env.EVAL_PAUSE_MS ?? '9000');
+  process.env.GROQ_RETRY_BASE_MS ??= '2500';
+  process.env.GROQ_MAX_ATTEMPTS ??= '5';
+
   for (const row of subset) {
     try {
+      await sleep(pauseMs);
       const intentRes = await adapter.generateText(
         INTENT_DETECTION_SYSTEM_PROMPT,
         INTENT_DETECTION_USER_PROMPT(row.message),
-        { temperature: 0 },
+        { temperature: 0, jsonMode: true },
       );
+
+      // A failed call returns success:false with empty text. Parsing that
+      // throws "Unexpected end of JSON input", which reads like a model error
+      // and is not one — it hid rate limiting behind a parse failure and made
+      // the accuracy figure look worse than the model actually is.
+      assertUsable(intentRes, 'intent');
       const intent =
         adapter.parseJsonResponse<{ intent: string }>(intentRes.text)?.intent ??
         '';
@@ -307,8 +372,10 @@ async function main() {
       const extractRes = await adapter.generateText(
         ENTITY_EXTRACTION_SYSTEM_PROMPT,
         ENTITY_EXTRACTION_USER_PROMPT(row.message, catalogContext),
-        { temperature: 0.05 },
+        { temperature: 0.05, jsonMode: true },
       );
+
+      assertUsable(extractRes, 'extraction');
       const extracted = adapter.parseJsonResponse<any>(extractRes.text);
 
       const fields = compare(row, extracted, intent);

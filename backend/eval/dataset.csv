@@ -18,7 +18,7 @@ sg-07,mokakda tiyenne?,singlish,INQUIRY,,,,,,product,"'what do you have' — no 
 sg-08,ganan kiyada blue shirt,singlish,INQUIRY,Blue Cotton Shirt,,,blue,,quantity,"'ganan kiyada' = how much is it (price question)"
 mx-01,mata 2 white shirt one size L,mixed,ORDER,White School Shirt,2,L,white,,,English nouns with Sinhala grammar
 mx-02,blue shirt තියෙනවද size XL,mixed,INQUIRY,Blue Cotton Shirt,,XL,blue,,quantity,Sinhala script mixed with English product name
-mx-03,frock 1k one red, Colombo 07 ta deliver karanna,mixed,ORDER,Ladies Cotton Frock,1,,red,Colombo 07,size,"comma inside the message — CSV quoting matters"
+mx-03,"frock 1k one red, Colombo 07 ta deliver karanna",mixed,ORDER,Ladies Cotton Frock,1,,red,Colombo 07,size,"comma inside the message — CSV quoting matters"
 hd-01,same as last time,en,ORDER,,,,,,product,references prior context the extractor cannot see
 hd-02,ela,singlish,GREETING,,,,,,,single slang word — should NOT become an order
 hd-03,mata one,singlish,ORDER,,,,,,product,"'one' = ඕන = need; no product, no quantity"
