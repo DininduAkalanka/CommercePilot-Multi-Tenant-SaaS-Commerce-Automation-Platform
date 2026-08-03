@@ -274,7 +274,7 @@ export default function AiPerformancePage() {
       </div>
 
       {/* Stage health */}
-      <div className="card table-scroll" style={{ overflow: 'hidden' }}>
+      <div className="card table-scroll">
         <div style={{ padding: '18px 22px 0' }}>
           <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>Pipeline stages</h3>
           <div className="t-muted" style={{ fontSize: '0.8rem' }}>
@@ -309,7 +309,7 @@ export default function AiPerformancePage() {
       </div>
 
       {/* Unfulfilled demand — a stocking signal, not an error list */}
-      <div className="card table-scroll" style={{ overflow: 'hidden' }}>
+      <div className="card table-scroll">
         <div style={{ padding: '18px 22px 0' }}>
           <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>
             Customers asked for products you don&apos;t have
