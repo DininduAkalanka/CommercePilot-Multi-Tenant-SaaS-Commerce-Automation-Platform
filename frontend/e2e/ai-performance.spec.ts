@@ -23,9 +23,10 @@ test.describe('AI Performance', () => {
       page.getByText('Orders prepared', { exact: true }),
     ).toBeVisible();
     await expect(page.getByText('Right first time')).toBeVisible();
-    await expect(
-      page.getByText('No orders in this period yet.', { exact: false }),
-    ).toBeVisible();
+    // The designed empty state, not a bare line of grey text.
+    await expect(page.getByText('Nothing scored yet')).toBeVisible();
+    // Exact: the stat hint also contains "No orders yet in this period".
+    await expect(page.getByText('No orders yet', { exact: true })).toBeVisible();
   });
 
   test('reflects real pipeline activity after a customer message', async ({ page }) => {

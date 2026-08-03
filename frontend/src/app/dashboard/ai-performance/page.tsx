@@ -13,6 +13,9 @@ import {
   Area,
   CartesianGrid,
   LabelList,
+  PieChart,
+  Pie,
+  Legend,
 } from 'recharts';
 import {
   AlertCircle,
@@ -23,6 +26,7 @@ import {
   Inbox,
   Search,
   Sparkles,
+  TrendingUp,
 } from '../../../components/icons';
 import { aiEngineApi } from '../../../lib/api';
 
@@ -261,6 +265,10 @@ export default function AiPerformancePage() {
       day: 'numeric',
       month: 'short',
     }),
+    // Split so the chart answers volume AND quality at once: a rising line is
+    // only good news if the amber band underneath is not rising with it.
+    clean: Math.max(d.prepared - d.corrected, 0),
+    corrected: d.corrected,
     prepared: d.prepared,
   }));
   const trendTotal = trend.reduce((sum, d) => sum + d.prepared, 0);
@@ -372,7 +380,7 @@ export default function AiPerformancePage() {
       </div>
 
       {/* ── Trend ──────────────────────────────────────────────── */}
-      <div className="card">
+      <div className="card panel">
         <div className="between sec-head">
           <div>
             <h2 className="sec-title">Orders prepared each day</h2>
@@ -384,18 +392,25 @@ export default function AiPerformancePage() {
         </div>
 
         {trendTotal === 0 ? (
-          <p className="t-muted empty">
-            Nothing yet. Once customers start messaging, their orders appear here
-            day by day.
-          </p>
+          <div className="empty-state">
+            <span className="empty-icon" aria-hidden="true">
+              <TrendingUp size={18} />
+            </span>
+            <p className="empty-head">No orders yet</p>
+            <p className="t-muted empty-sub">Once customers start messaging, each day appears here.</p>
+          </div>
         ) : (
           <div className="chart" aria-hidden="true">
             <ResponsiveContainer width="100%" height={190}>
               <AreaChart data={trend} margin={{ top: 6, right: 8, bottom: 0, left: -22 }}>
                 <defs>
                   <linearGradient id="preparedFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.22} />
-                    <stop offset="100%" stopColor="var(--brand)" stopOpacity={0} />
+                    <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.26} />
+                    <stop offset="100%" stopColor="var(--brand)" stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id="correctedFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#d6a24a" stopOpacity={0.26} />
+                    <stop offset="100%" stopColor="#d6a24a" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
@@ -426,14 +441,39 @@ export default function AiPerformancePage() {
                     borderRadius: 10,
                     fontSize: '0.8125rem',
                   }}
-                  formatter={(v) => [`${String(v)} orders`, '']}
+                  formatter={(v, n) => [`${String(v)}`, String(n)]}
+                />
+                <Legend
+                  verticalAlign="top"
+                  align="right"
+                  height={26}
+                  iconType="circle"
+                  iconSize={8}
+                  formatter={(value) => (
+                    <span style={{ color: 'var(--ink-2)', fontSize: '0.75rem' }}>
+                      {value}
+                    </span>
+                  )}
                 />
                 <Area
                   type="monotone"
-                  dataKey="prepared"
+                  dataKey="clean"
+                  name="Right first time"
+                  stackId="1"
                   stroke="var(--brand)"
                   strokeWidth={2}
                   fill="url(#preparedFill)"
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="corrected"
+                  name="You edited"
+                  stackId="1"
+                  stroke="#d6a24a"
+                  strokeWidth={2}
+                  fill="url(#correctedFill)"
                   dot={false}
                   activeDot={{ r: 4 }}
                 />
@@ -443,8 +483,12 @@ export default function AiPerformancePage() {
         )}
       </div>
 
+      {/* Two columns on desktop: a single stacked column of full-width
+          cards reads as a list, not a dashboard, and wastes the right
+          half of every wide screen. */}
+      <div className="split">
       {/* ── Outcomes ───────────────────────────────────────────── */}
-      <div className="card">
+      <div className="card panel">
         <div className="between sec-head">
           <h2 className="sec-title">What happened to each request</h2>
           {totalOutcomes > 0 && (
@@ -458,27 +502,54 @@ export default function AiPerformancePage() {
         </p>
 
         {totalOutcomes === 0 ? (
-          <p className="t-muted empty">
-            No orders in this period yet. Send a test message from the WhatsApp
-            page to see this fill in.
-          </p>
+          <div className="empty-state">
+            <span className="empty-icon" aria-hidden="true">
+              <Inbox size={18} />
+            </span>
+            <p className="empty-head">Nothing scored yet</p>
+            <p className="t-muted empty-sub">Send a test message from the WhatsApp page to see this fill in.</p>
+          </div>
         ) : (
           <>
+            {/* A donut carries a total in its centre and stays legible when
+                one slice dominates — the flat stripe it replaces rendered as
+                a single solid bar, which reads as an error, not a split. */}
             <div
-              className="row bar"
+              className="donut-wrap"
               role="img"
               aria-label={outcomes.map((o) => `${o.name}: ${o.count}`).join(', ')}
             >
-              {outcomes
-                .filter((o) => o.count > 0)
-                .map((o) => (
-                  <div
-                    key={o.name}
-                    className="bar-seg"
-                    style={{ flexGrow: o.count, background: o.fill }}
-                    title={`${o.name}: ${o.count}`}
+              <ResponsiveContainer width="100%" height={168}>
+                <PieChart>
+                  <Pie
+                    data={outcomes.filter((o) => o.count > 0)}
+                    dataKey="count"
+                    nameKey="name"
+                    innerRadius={52}
+                    outerRadius={76}
+                    paddingAngle={outcomes.filter((o) => o.count > 0).length > 1 ? 3 : 0}
+                    stroke="none"
+                  >
+                    {outcomes
+                      .filter((o) => o.count > 0)
+                      .map((o) => (
+                        <Cell key={o.name} fill={o.fill} />
+                      ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 10,
+                      fontSize: '0.8125rem',
+                    }}
                   />
-                ))}
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="donut-centre" aria-hidden="true">
+                <span className="donut-value">{totalOutcomes}</span>
+                <span className="donut-label">requests</span>
+              </div>
             </div>
 
             <ul className="legend">
@@ -508,7 +579,7 @@ export default function AiPerformancePage() {
       </div>
 
       {/* ── Missed demand ──────────────────────────────────────── */}
-      <div className="card">
+      <div className="card panel">
         <div className="between sec-head">
           <h2 className="sec-title">
             <Search size={15} aria-hidden="true" />
@@ -526,9 +597,13 @@ export default function AiPerformancePage() {
         </p>
 
         {demandChart.length === 0 ? (
-          <p className="t-muted empty">
-            Nothing missed in this period — every request found a product.
-          </p>
+          <div className="empty-state">
+            <span className="empty-icon" aria-hidden="true">
+              <CheckCircle size={18} />
+            </span>
+            <p className="empty-head">Nothing missed</p>
+            <p className="t-muted empty-sub">Every request in this period found a product in your catalogue.</p>
+          </div>
         ) : (
           <>
             <div className="chart" aria-hidden="true">
@@ -578,9 +653,11 @@ export default function AiPerformancePage() {
         )}
       </div>
 
+      </div>
+
       {/* ── Problems, only when there are any ──────────────────── */}
       {data.recentFailures.length > 0 && (
-        <div className="card">
+        <div className="card panel">
           <h2 className="sec-title">Recent problems</h2>
           <p className="t-muted sec-sub">
             Messages the assistant could not handle. Nothing was lost — these
@@ -613,6 +690,13 @@ export default function AiPerformancePage() {
         .head-actions {
           gap: 8px;
           flex-wrap: wrap;
+        }
+
+        /* .card carries no padding of its own, so every section needs it.
+           Without this the text sits flush against the border and the card
+           reads as an empty box with something floating in the corner. */
+        .panel {
+          padding: 20px 22px;
         }
 
         /* One segmented control rather than three loose buttons. */
@@ -661,7 +745,7 @@ export default function AiPerformancePage() {
         .status {
           gap: 12px;
           align-items: flex-start;
-          padding: 15px 17px;
+          padding: 14px 17px;
         }
         .status-icon {
           flex-shrink: 0;
@@ -672,48 +756,130 @@ export default function AiPerformancePage() {
         }
         .status-text {
           font-size: 0.8125rem;
-          margin-top: 3px;
+          margin-top: 2px;
           max-width: 62ch;
         }
 
+        .stat-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 12px;
+        }
+
+        /* Wide screens get two columns. A single stacked column of full-width
+           cards reads as a list and leaves half the screen empty. */
+        .split {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 14px;
+        }
+        @media (min-width: 1100px) {
+          .split {
+            grid-template-columns: 1fr 1fr;
+            align-items: start;
+          }
+        }
+
+        .sec-head {
+          gap: 12px;
+          align-items: flex-start;
+          margin-bottom: 14px;
+          flex-wrap: wrap;
+        }
+        .sec-head .sec-sub {
+          margin-bottom: 0;
+        }
         .sec-title {
           display: flex;
           align-items: center;
           gap: 8px;
-          font-size: 1.0625rem;
+          font-size: 1rem;
           font-weight: 600;
-          margin-bottom: 5px;
+          margin-bottom: 4px;
         }
         .sec-sub {
           font-size: 0.8125rem;
           line-height: 1.5;
-          margin-bottom: 18px;
-          max-width: 68ch;
+          margin-bottom: 16px;
+          max-width: 62ch;
         }
-        .empty {
-          font-size: 0.875rem;
-          padding: 16px 0;
+        .trend-total {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: var(--ink-2);
+          background: var(--surface-3);
+          padding: 5px 10px;
+          border-radius: var(--r-full);
+          white-space: nowrap;
         }
 
-        /* Proportion bar: the split is legible instantly, with no axis to read
-           and nothing to shrink on a phone. */
-        .bar {
-          height: 12px;
-          border-radius: 999px;
-          overflow: hidden;
-          gap: 2px;
-          margin-bottom: 20px;
+        /* A designed empty state: centred, with an icon and a next step.
+           Grey text left-aligned under a heading looks like a rendering
+           failure rather than a deliberate state. */
+        .empty-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          gap: 6px;
+          padding: 26px 12px;
+          min-height: 132px;
+          background: var(--surface-1);
+          border: 1px dashed var(--line);
+          border-radius: var(--r-md);
         }
-        .bar-seg {
-          height: 100%;
-          min-width: 4px;
+        .empty-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 38px;
+          height: 38px;
+          border-radius: var(--r-full);
+          background: var(--surface-3);
+          color: var(--ink-3);
+          margin-bottom: 2px;
+        }
+        .empty-head {
+          font-size: 0.9375rem;
+          font-weight: 600;
+        }
+        .empty-sub {
+          font-size: 0.8125rem;
+          line-height: 1.5;
+          max-width: 42ch;
+        }
+
+        .donut-wrap {
+          position: relative;
+          margin-bottom: 16px;
+        }
+        .donut-centre {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+        }
+        .donut-value {
+          font-size: 1.5rem;
+          font-weight: 650;
+          font-variant-numeric: tabular-nums;
+          line-height: 1.1;
+        }
+        .donut-label {
+          font-size: 0.6875rem;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--ink-3);
         }
 
         .legend {
           list-style: none;
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
-          gap: 15px;
+          gap: 13px;
           margin: 0;
           padding: 0;
         }
@@ -752,27 +918,8 @@ export default function AiPerformancePage() {
           margin-top: 2px;
         }
 
-        .sec-head {
-          gap: 14px;
-          align-items: flex-start;
-          margin-bottom: 16px;
-          flex-wrap: wrap;
-        }
-        .sec-head .sec-sub {
-          margin-bottom: 0;
-        }
-        .trend-total {
-          font-size: 0.75rem;
-          font-weight: 600;
-          color: var(--ink-2);
-          background: var(--surface-3);
-          padding: 5px 10px;
-          border-radius: 999px;
-          white-space: nowrap;
-        }
-
         .chart {
-          margin-left: -8px;
+          margin-left: -10px;
         }
         .foot {
           font-size: 0.75rem;
@@ -784,7 +931,7 @@ export default function AiPerformancePage() {
           margin: 0;
           padding: 0;
           display: grid;
-          gap: 13px;
+          gap: 12px;
         }
         .problem {
           display: flex;
@@ -805,9 +952,15 @@ export default function AiPerformancePage() {
         }
 
         @media (max-width: 640px) {
-          /* Product names need the room more than the axis does. */
+          .panel {
+            padding: 17px 16px;
+          }
           .chart {
-            margin-left: -14px;
+            margin-left: -16px;
+          }
+          .empty-state {
+            min-height: 118px;
+            padding: 22px 10px;
           }
         }
       `}</style>
