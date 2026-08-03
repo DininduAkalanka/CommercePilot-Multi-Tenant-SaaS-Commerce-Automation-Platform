@@ -15,7 +15,7 @@ describe('ProductVariantService', () => {
   let service: ProductVariantService;
 
   const mockPrisma = {
-    product: { findFirst: jest.fn() },
+    product: { findFirst: jest.fn(), findMany: jest.fn() },
     productVariant: {
       create: jest.fn(),
       findFirst: jest.fn(),
@@ -309,6 +309,206 @@ describe('ProductVariantService', () => {
       await expect(service.remove('tenant-1', 'var-x')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  // ── PR2: backfill + dual-write ──────────────────────────────────
+  //
+  // Every product gets exactly one "default" variant mirroring its
+  // stockQuantity. Nothing reads variants yet (that is PR3), so the only job
+  // here is to make the two copies agree — and to never let the mirror break
+  // the path it mirrors.
+  describe('ensureDefaultVariant', () => {
+    it('creates the default variant carrying the product stock', async () => {
+      await service.ensureDefaultVariant('tenant-1', 'prod-1', 12);
+
+      expect(mockPrisma.productVariant.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tenantId: 'tenant-1',
+          productId: 'prod-1',
+          attributeKey: 'default',
+          stockQuantity: 12,
+        }),
+      });
+    });
+
+    it('updates the existing default instead of creating a second one', async () => {
+      // Called on every product update, so it must converge rather than
+      // accumulate. The unique index would reject a duplicate anyway, and that
+      // exception would fail the product save the user actually asked for.
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: 'var-default',
+        attributeKey: 'default',
+      });
+
+      await service.ensureDefaultVariant('tenant-1', 'prod-1', 7);
+
+      expect(mockPrisma.productVariant.create).not.toHaveBeenCalled();
+      expect(mockPrisma.productVariant.update).toHaveBeenCalledWith({
+        where: { id: 'var-default' },
+        data: expect.objectContaining({ stockQuantity: 7 }),
+      });
+    });
+
+    it('looks the variant up scoped to the tenant', async () => {
+      await service.ensureDefaultVariant('tenant-1', 'prod-1', 1);
+
+      expect(mockPrisma.productVariant.findFirst).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          productId: 'prod-1',
+          attributeKey: 'default',
+        },
+      });
+    });
+
+    it('revives a soft-deleted default rather than colliding with it', async () => {
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: 'var-default',
+        deletedAt: new Date(),
+      });
+
+      await service.ensureDefaultVariant('tenant-1', 'prod-1', 4);
+
+      expect(mockPrisma.productVariant.update).toHaveBeenCalledWith({
+        where: { id: 'var-default' },
+        data: expect.objectContaining({ stockQuantity: 4, deletedAt: null }),
+      });
+    });
+
+    it('uses the transaction client when one is supplied', async () => {
+      // Order sync decrements product stock inside a transaction. Writing the
+      // mirror outside it would leave the two disagreeing whenever that
+      // transaction rolls back.
+      const tx = {
+        productVariant: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockResolvedValue({}),
+          update: jest.fn().mockResolvedValue({}),
+        },
+      };
+
+      await service.ensureDefaultVariant('tenant-1', 'prod-1', 3, tx as never);
+
+      expect(tx.productVariant.create).toHaveBeenCalled();
+      expect(mockPrisma.productVariant.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('decrementDefaultStock', () => {
+    it('decrements the default variant', async () => {
+      mockPrisma.productVariant.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.decrementDefaultStock('tenant-1', 'prod-1', 2);
+
+      expect(mockPrisma.productVariant.updateMany).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          productId: 'prod-1',
+          attributeKey: 'default',
+          deletedAt: null,
+        },
+        data: { stockQuantity: { decrement: 2 } },
+      });
+    });
+
+    it('does nothing when the product has no default variant yet', async () => {
+      // During rollout some products are not backfilled. Order sync must still
+      // complete: losing a real customer order to keep a mirror tidy would be
+      // a far worse failure than the mirror being stale.
+      mockPrisma.productVariant.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.decrementDefaultStock('tenant-1', 'prod-1', 2),
+      ).resolves.not.toThrow();
+    });
+
+    it('never throws into the caller, even on a database error', async () => {
+      mockPrisma.productVariant.updateMany.mockRejectedValue(
+        new Error('deadlock'),
+      );
+
+      await expect(
+        service.decrementDefaultStock('tenant-1', 'prod-1', 1),
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe('backfillDefaults', () => {
+    it('creates one default variant per product that has none', async () => {
+      mockPrisma.product.findMany.mockResolvedValueOnce([
+        { id: 'p1', tenantId: 't1', stockQuantity: 5 },
+        { id: 'p2', tenantId: 't1', stockQuantity: 0 },
+      ]);
+      mockPrisma.product.findMany.mockResolvedValueOnce([]);
+
+      const result = await service.backfillDefaults();
+
+      expect(result.created).toBe(2);
+      expect(mockPrisma.productVariant.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('only selects products with no variants at all', async () => {
+      // Idempotency is the whole point: this runs on deploy and may be re-run
+      // by hand. A product that already has real variants must never gain a
+      // spurious "default" alongside them.
+      mockPrisma.product.findMany.mockResolvedValueOnce([]);
+
+      await service.backfillDefaults();
+
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            deletedAt: null,
+            variants: { none: {} },
+          }),
+        }),
+      );
+    });
+
+    it('carries each product current stock onto its variant', async () => {
+      mockPrisma.product.findMany.mockResolvedValueOnce([
+        { id: 'p1', tenantId: 't1', stockQuantity: 9 },
+      ]);
+      mockPrisma.product.findMany.mockResolvedValueOnce([]);
+
+      await service.backfillDefaults();
+
+      expect(mockPrisma.productVariant.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          stockQuantity: 9,
+          attributeKey: 'default',
+        }),
+      });
+    });
+
+    it('can be scoped to one tenant', async () => {
+      mockPrisma.product.findMany.mockResolvedValueOnce([]);
+
+      await service.backfillDefaults('tenant-1');
+
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tenantId: 'tenant-1' }),
+        }),
+      );
+    });
+
+    it('keeps going when one product fails', async () => {
+      // A single bad row must not abandon the rest of the catalogue.
+      mockPrisma.product.findMany.mockResolvedValueOnce([
+        { id: 'p1', tenantId: 't1', stockQuantity: 1 },
+        { id: 'p2', tenantId: 't1', stockQuantity: 2 },
+      ]);
+      mockPrisma.product.findMany.mockResolvedValueOnce([]);
+      mockPrisma.productVariant.create
+        .mockRejectedValueOnce(new Error('constraint'))
+        .mockResolvedValueOnce({ id: 'v2' });
+
+      const result = await service.backfillDefaults();
+
+      expect(result.created).toBe(1);
+      expect(result.failed).toBe(1);
     });
   });
 });

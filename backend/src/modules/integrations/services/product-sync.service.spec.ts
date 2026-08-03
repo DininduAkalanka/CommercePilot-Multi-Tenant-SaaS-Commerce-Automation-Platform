@@ -1,10 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ProductVariantService } from '../../products/product-variant.service';
 import { ProductSyncService } from './product-sync.service';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { ProductRetrieverService } from '../../ai-engine/pipeline/product-retriever.service';
 import { ECOMMERCE_ADAPTER } from '../interfaces/ecommerce-adapter.interface';
 
 describe('ProductSyncService', () => {
+  const mockVariants = { ensureDefaultVariant: jest.fn() };
+
   let service: ProductSyncService;
 
   const mockPrisma = {
@@ -28,6 +31,10 @@ describe('ProductSyncService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProductSyncService,
+        {
+          provide: ProductVariantService,
+          useValue: mockVariants,
+        },
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ProductRetrieverService, useValue: mockProductRetriever },
         { provide: ECOMMERCE_ADAPTER, useValue: mockEcommerceAdapter },

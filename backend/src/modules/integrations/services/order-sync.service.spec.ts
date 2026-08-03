@@ -1,3 +1,4 @@
+import { ProductVariantService } from '../../products/product-variant.service';
 import { OrderSyncService } from './order-sync.service';
 import { PrismaService } from '../../../common/database/prisma.service';
 import {
@@ -58,11 +59,16 @@ describe('OrderSyncService', () => {
     ],
   };
 
+  let variants: ProductVariantService;
+
   beforeEach(() => {
     jest.clearAllMocks();
     tx = buildTx();
     (prisma.$transaction as jest.Mock).mockImplementation((cb) => cb(tx));
-    service = new OrderSyncService(prisma, adapter);
+    variants = {
+      decrementDefaultStock: jest.fn().mockResolvedValue(undefined),
+    } as unknown as ProductVariantService;
+    service = new OrderSyncService(prisma, adapter, variants);
   });
 
   it('syncs an approved order: persists external id, reduces inventory, audits', async () => {
@@ -179,6 +185,27 @@ describe('OrderSyncService', () => {
     expect(createOrder).not.toHaveBeenCalled();
     expect(tx.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: 'FAILED' } }),
+    );
+  });
+
+  it('mirrors the stock decrement onto the default variant inside the transaction', async () => {
+    // Must receive the SAME transaction client the product update used. Writing
+    // the mirror outside it would leave product and variant stock disagreeing
+    // whenever the surrounding transaction rolls back.
+    orderFindFirst.mockResolvedValue(approvedOrder);
+    initialize.mockResolvedValue(mockClient);
+    createOrder.mockResolvedValue({ success: true, externalOrderId: 'wc_555' });
+
+    await service.handleOrderApproved({
+      tenantId: 'tenant-1',
+      orderId: 'order-1',
+    });
+
+    expect(variants.decrementDefaultStock).toHaveBeenCalledWith(
+      'tenant-1',
+      expect.any(String),
+      expect.any(Number),
+      tx,
     );
   });
 });

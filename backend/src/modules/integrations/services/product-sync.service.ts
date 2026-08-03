@@ -1,6 +1,7 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { ProductRetrieverService } from '../../ai-engine/pipeline/product-retriever.service';
+import { ProductVariantService } from '../../products/product-variant.service';
 import { ECOMMERCE_ADAPTER } from '../interfaces/ecommerce-adapter.interface';
 import type { IEcommerceAdapter } from '../interfaces/ecommerce-adapter.interface';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,6 +15,7 @@ export class ProductSyncService {
     private readonly productRetriever: ProductRetrieverService,
     @Inject(ECOMMERCE_ADAPTER)
     private readonly adapter: IEcommerceAdapter,
+    private readonly variants: ProductVariantService,
   ) {}
 
   /**
@@ -61,6 +63,15 @@ export class ProductSyncService {
         });
         productId = existing.id;
         updateCount++;
+
+        // Dual-write (Phase 1 PR2) — WooCommerce is the source of truth for
+        // stock on synced catalogues, so this path matters as much as manual
+        // edits do.
+        await this.variants.ensureDefaultVariant(
+          tenantId,
+          productId,
+          p.stockQuantity,
+        );
       } else {
         // Create
         productId = uuidv4();
@@ -78,6 +89,13 @@ export class ProductSyncService {
             attributes: p.attributes,
           },
         });
+
+        // Dual-write (Phase 1 PR2)
+        await this.variants.ensureDefaultVariant(
+          tenantId,
+          productId,
+          p.stockQuantity,
+        );
         newCount++;
       }
 

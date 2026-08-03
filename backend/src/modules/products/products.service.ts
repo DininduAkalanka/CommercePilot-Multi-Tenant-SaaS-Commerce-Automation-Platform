@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../common/database/prisma.service';
 import { ProductRetrieverService } from '../ai-engine/pipeline/product-retriever.service';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
+import { ProductVariantService } from './product-variant.service';
 
 @Injectable()
 export class ProductsService {
@@ -11,6 +12,7 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly productRetriever: ProductRetrieverService,
+    private readonly variants: ProductVariantService,
   ) {}
 
   async createProduct(tenantId: string, dto: CreateProductDto) {
@@ -29,6 +31,14 @@ export class ProductsService {
         isActive: true,
       },
     });
+
+    // Dual-write (Phase 1 PR2). Nothing reads variants yet; this keeps the
+    // mirror in step so PR3 can switch reads over without a data migration.
+    await this.variants.ensureDefaultVariant(
+      tenantId,
+      product.id,
+      product.stockQuantity,
+    );
 
     this.logger.log(`[${tenantId}] Product created: ${product.id}`);
 
@@ -108,6 +118,14 @@ export class ProductsService {
         attributes: dto.attributes,
       },
     });
+
+    // Dual-write (Phase 1 PR2). Nothing reads variants yet; this keeps the
+    // mirror in step so PR3 can switch reads over without a data migration.
+    await this.variants.ensureDefaultVariant(
+      tenantId,
+      updated.id,
+      updated.stockQuantity,
+    );
 
     this.logger.log(`[${tenantId}] Product updated: ${updated.id}`);
 

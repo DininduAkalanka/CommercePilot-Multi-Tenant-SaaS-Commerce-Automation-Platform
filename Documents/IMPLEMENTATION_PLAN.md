@@ -13,9 +13,9 @@
 |---|---|
 | **Pre-work** — audit remediation | ✅ Complete · merged · live |
 | **Phase 0** — Instrument & measure | ✅ Complete · merged · live |
-| **Phase 1** — `ProductVariant` | 🟡 PR1 of 4 · **awaiting merge** — launch prerequisite |
-| **Phase 2** — Stop losing orders | 🟡 3 of 6 merged · 2.4 awaiting merge |
-| **Phase 3** — Sinhala / Singlish | ⬜ Blocked on eval dataset |
+| **Phase 1** — `ProductVariant` | 🟡 PR1 merged · PR2 built — launch prerequisite |
+| **Phase 2** — Stop losing orders | 🟡 4 of 6 merged · 2.5 / 2.6 remain |
+| **Phase 3** — Sinhala / Singlish | 🟡 Query normalisation merged · tuning blocked on eval dataset |
 | **Phase 4** — Voice & images | ⬜ Not started |
 | **Phase 5** — Scale out | ⬜ Trigger-based — no trigger fired yet |
 | **Phase 6** — Payments & courier | ⬜ Not started |
@@ -83,6 +83,45 @@ Found by a full audit on 2026-08-02. All fixed, merged and deployed.
       See `backend/eval/README.md`: export WhatsApp chats, anonymise phone
       numbers and addresses per SECURITY.md §3, match your real language mix.
 
+
+### ✅ Unplanned — AI provider migration (merged, live)
+
+Not in the original plan. Forced by Gemini's free tier being region-gated:
+a key created in Sri Lanka lists every model and then fails the first real
+call with `limit: 0, metric: generate_content_free_tier_requests`. The
+allocation is zero, not exhausted, and lifting it needs a card.
+
+- **`AiAdapter` interface + `AI_ADAPTER` token** — five services injected the
+  concrete `GeminiAdapter`, so there was nothing to swap. `AI_PROVIDER`
+  selects at startup; switching back is an env change, not a deploy.
+- **`GroqAdapter`** — free tier serves Sri Lanka, ~200-400ms, valid JSON.
+  Order extraction works; Sinhala colour accuracy is unreliable, which the
+  0.95 auto-approve floor is what protects against.
+- **`EmbeddingProvider` split** — embeddings and text generation come from
+  different vendors now, and Groq has no embedding models at all.
+- **`JinaEmbeddingProvider`** — emits 768 dims so `vector(768)` and its HNSW
+  index are untouched. ⚠️ **The key currently has zero balance**
+  (`AUTHZ_INSUFFICIENT_BALANCE`), so `EMBEDDING_PROVIDER` falls back to
+  `none` and retrieval uses text search. Not blocking.
+- **Removed** `GeminiAdapter.generateEmbedding` — it targeted
+  `text-embedding-004`, which the API now 404s.
+
+**Measured, so it is not re-litigated later:** Jina handles English and
+Singlish well (Singlish→English 0.628, margin 0.322). Sinhala *script* does
+not work — every Sinhala query ranked the same unrelated product first,
+margins 0.005-0.035. Shorter product text did not help and the asymmetric
+`retrieval.*` tasks were worse. Query normalisation is what fixes it.
+
+### ✅ Unplanned — query normalisation (merged, live)
+
+Fixed a **total** failure, not a marginal one. Text search tokenises on
+`[^a-z0-9]`, so Sinhala yielded ZERO search terms and matched nothing;
+combined with no embedding provider, Sinhala customers got no products at
+all. Normalising to English before retrieval took vector margins from 0.010
+to 0.421 and text terms from 0 to 2. Retrieval only — extraction still
+receives the original message, guarded by a mutation-tested invariant.
+`QUERY_NORMALIZATION_ENABLED=false` reverts without a deploy.
+
 ### 🟡 Phase 1 — `ProductVariant` (PR1 done, PR2–PR4 pending)
 
 > **Launch prerequisite.** Must land **before** `WHATSAPP_PROVIDER` comes off
@@ -109,8 +148,19 @@ WooCommerce with no size/colour.
       duplicate combinations rather than each write path remembering to check.
       Verified on `pgvector/pg16`: unique index rejects a colliding
       combination, product FK cascades, image migrates and boots clean.
-- [ ] **PR2 Backfill + dual-write** — one default variant per product carrying
+- [x] **PR2 Backfill + dual-write** — one default variant per product carrying
       current stock; write stock to both. *Risk: low.*
+      **Built** — branch `feat/product-variant-backfill`.
+      `npm run backfill:variants [tenantId]` — idempotent, selects only
+      products with NO variants, so re-running reconciles without touching
+      products that already have real size/colour variants.
+      Dual-write wired into all five stock write paths: product create,
+      product update, WooCommerce sync create, WooCommerce sync update, and
+      the order-sync decrement. The decrement joins the caller's
+      **transaction** — verified on a live database that a rolled-back sync
+      leaves product and variant still agreeing.
+      Mirror failures never throw into the caller: a stale mirror is repaired
+      by re-running the backfill, a lost order is not. Suite 311 → 327.
 - [ ] **PR3 Switch reads** behind `VARIANT_STOCK_ENABLED` — `validateStock`,
       RAG context, order-sync decrement. *Risk: medium; flag off reverts instantly.*
 - [ ] **PR4 Contract** — `Product.stockQuantity` becomes a maintained rollup.
@@ -285,14 +335,18 @@ cd backend && npm run eval -- --limit 5 --verbose
 
 ## 7. Recommended order from here
 
-0. **Merge two open branches** — `feat/duplicate-detection` (`2d42a50`) and
-   `feat/product-variant-expand` (`105ea94`). Both are green and additive.
-   They touch `schema.prisma` in different places, so whichever merges second
-   may need a trivial conflict resolution — keep **both** models.
-1. **Get `GEMINI_API_KEY`** — nothing AI-related is measurable without it
+0. **Set `GROQ_API_KEY` + `AI_PROVIDER=groq` in Render.** Until then
+   production runs the mock and none of the AI work above is live. This is
+   the single change that switches the AI on for real customers, so
+   immediately after: run `npm run eval` for a first real accuracy number,
+   and confirm `autoApproveEnabled` is false per tenant against the live
+   database rather than trusting the default.
+1. ~~Get `GEMINI_API_KEY`~~ — **abandoned**, region-gated. Groq replaces it
 2. **Set up Resend** — owner emails currently never arrive
 3. **Embedding backfill** (dev, after #1), then run `npm run eval` for a first
    real accuracy number
 4. **Finish Phase 2** — 2.5/2.6 (~1 day)
-5. **Phase 1 PR2–PR4** — before going off mock (~3 days)
+5. **Phase 1 PR3–PR4** — switch reads behind `VARIANT_STOCK_ENABLED`, then
+   contract. Run `npm run backfill:variants` in production FIRST and confirm
+   the mirror is complete before PR3 makes anything read it (~2 days)
 6. **Collect 50 eval messages**, then Phase 3

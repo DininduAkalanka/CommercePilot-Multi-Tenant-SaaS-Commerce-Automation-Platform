@@ -4,5 +4,6 @@
   // including it widens tsc's inferred rootDir from `src` to the project root,
   // which relocates the entrypoint from dist/main.js to dist/src/main.js and
   // breaks `node dist/main` in the container.
-  "exclude": ["node_modules", "test", "dist", "eval", "**/*spec.ts"]
+  "exclude": ["node_modules", "test", "dist", "eval",
+    "scripts", "**/*spec.ts"]
 }
