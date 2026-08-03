@@ -160,6 +160,14 @@ model Product {
   // pgvector embedding for RAG product search
   // Generated from: name + description + attributes
   // Model: text-embedding-004 (768 dimensions)
+  //
+  // ⚠️  `products_embedding_hnsw_idx` (migration 20260802120000) CANNOT be
+  // declared here — Prisma has no HNSW index type. It is therefore permanent
+  // schema drift, and `prisma migrate dev` WILL offer to drop it. Never accept
+  // that: without the index, vector search falls back to a sequential scan over
+  // every product row. Every other index in this schema is declared precisely
+  // so this remains the only expected drift — if `migrate diff` reports
+  // anything else, something is genuinely wrong.
   embedding Unsupported("vector(768)")?
 
   createdAt DateTime  @default(now())
@@ -443,6 +451,7 @@ model AIProcessingLog {
   @@index([tenantId])
   @@index([messageId])
   @@index([stage])
+  @@index([tenantId, createdAt(sort: Desc)], map: "ai_processing_logs_tenant_created_idx")
   @@map("ai_processing_logs")
 }
 
@@ -494,6 +503,12 @@ model AIDraftOrder {
 
   @@index([tenantId])
   @@index([tenantId, status])
+  // Declared to match the raw SQL that created them. Undeclared indexes look
+  // like drift to Prisma, and `migrate dev` would generate a migration
+  // DROPPING them — silently removing the index the duplicate-detection
+  // lookup and the metrics queries depend on.
+  @@index([tenantId, createdAt(sort: Desc)], map: "ai_draft_orders_tenant_created_idx")
+  @@index([tenantId, customerId, createdAt(sort: Desc)], map: "ai_draft_orders_customer_created_idx")
   @@map("ai_draft_orders")
 }
 
@@ -619,8 +634,8 @@ model UnfulfilledDemand {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
-  @@index([tenantId, createdAt])
-  @@index([tenantId, normalizedQuery])
+  @@index([tenantId, createdAt(sort: Desc)], map: "unfulfilled_demand_tenant_created_idx")
+  @@index([tenantId, normalizedQuery], map: "unfulfilled_demand_tenant_query_idx")
   @@map("unfulfilled_demand")
 }
 
