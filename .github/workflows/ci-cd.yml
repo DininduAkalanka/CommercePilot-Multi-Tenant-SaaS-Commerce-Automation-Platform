@@ -148,6 +148,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          # This job installs both workspaces, so both lock files seed the
+          # cache. Without an explicit path setup-node looks for one at the
+          # repository root, which does not exist here and fails the job.
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
       - name: Install backend dependencies
         working-directory: backend
