@@ -52,7 +52,7 @@ const NAV_GROUPS: { label: string; items: { href: string; icon: typeof LayoutDas
     label: 'Insights',
     items: [
       { href: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },
-      { href: '/dashboard/ai-performance', icon: Bot, label: 'AI Performance' },
+      { href: '/dashboard/ai-performance', icon: Bot, label: 'Assistant' },
       { href: '/dashboard/notifications', icon: Bell, label: 'Notifications' },
     ],
   },
@@ -231,7 +231,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <button onClick={() => setMobileOpen(true)} className="btn btn-ghost btn-icon mobile-menu-btn" aria-label="Open menu">
               <Menu size={18} />
             </button>
-            <div className="row" style={{ gap: 8, fontSize: '0.8125rem', color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>
+            <div className="row plan-badge" style={{ gap: 8, fontSize: '0.8125rem', color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>
               <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>Starter</span>
               <span style={{ color: 'var(--line-strong)' }}>·</span>
               <span className="row" style={{ gap: 6, color: 'var(--brand)' }}>
@@ -487,6 +487,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
         @media (max-width: 480px) {
           .user-name { display: none; }
+        }
+        /* The plan badge is informational and set to nowrap, so on a narrow
+           header it collides with the action buttons rather than truncating.
+           The same information is on the Settings page. */
+        @media (max-width: 420px) {
+          .plan-badge { display: none; }
         }
       `}</style>
     </div>

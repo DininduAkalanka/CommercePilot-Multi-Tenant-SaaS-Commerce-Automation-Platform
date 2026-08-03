@@ -2,32 +2,46 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
 } from 'recharts';
 import {
-  Bot, Activity, Zap, AlertCircle, Loader2, RefreshCw, CheckCircle, Sparkles,
+  AlertCircle,
+  Loader2,
+  RefreshCw,
+  CheckCircle,
+  Clock,
+  Inbox,
+  Search,
+  Sparkles,
 } from '../../../components/icons';
 import { aiEngineApi } from '../../../lib/api';
 
-interface StageHealth {
-  stage: string;
-  runs: number;
-  succeeded: number;
-  failed: number;
-  successRate: number;
-  avgMs: number;
-  p95Ms: number;
-}
+/**
+ * Assistant activity — written for a shop owner, not an engineer.
+ *
+ * The previous version reported token counts, model identifiers, p95 stage
+ * latency and raw provider error strings. All accurate, none of it answerable
+ * by the person reading it. A dashboard that cannot be acted on is noise.
+ *
+ * Every number here answers one of three questions an owner actually has:
+ *   1. Is it working?
+ *   2. How much work did it save me?
+ *   3. What should I do about it?
+ *
+ * Anything answering none of those was removed rather than reworded — the
+ * fastest way to make a dashboard unreadable is to keep everything and shrink
+ * the font.
+ */
 
 interface AiMetrics {
   period: { days: number; from: string; to: string };
-  pipeline: {
-    totalRuns: number;
-    succeeded: number;
-    failed: number;
-    successRate: number;
-    byStage: StageHealth[];
-  };
+  pipeline: { totalRuns: number; succeeded: number; failed: number; successRate: number };
   confidence: {
     average: number | null;
     scored: number;
@@ -42,54 +56,7 @@ interface AiMetrics {
     pending: number;
   };
   models: { modelUsed: string; runs: number }[];
-  tokens: { total: number };
   recentFailures: { stage: string; errorMessage: string | null; at: string }[];
-}
-
-// Muted semantics matching the analytics page: the three confidence bands map
-// to "needs work", "normal", "good" rather than an arbitrary rainbow.
-const BAND_COLORS = ['#df6a52', '#d6a24a', '#37b699'];
-
-const pct = (n: number | null | undefined) =>
-  n === null || n === undefined ? '—' : `${(n * 100).toFixed(1)}%`;
-
-const humanStage = (stage: string) =>
-  stage
-    .toLowerCase()
-    .split('_')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-
-function StatCard({
-  label,
-  value,
-  hint,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  icon: React.ElementType;
-}) {
-  return (
-    <div className="glass-card row" style={{ padding: 22, alignItems: 'flex-start', justifyContent: 'space-between' }}>
-      <div>
-        <div className="t-eyebrow" style={{ marginBottom: 9 }}>{label}</div>
-        <div className="metric" style={{ fontSize: '1.75rem' }}>{value}</div>
-        {hint && (
-          <div className="t-muted" style={{ fontSize: '0.75rem', marginTop: 6, maxWidth: 220 }}>
-            {hint}
-          </div>
-        )}
-      </div>
-      <span
-        className="row"
-        style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--brand-soft)', color: 'var(--brand)', justifyContent: 'center', flexShrink: 0 }}
-      >
-        <Icon size={17} />
-      </span>
-    </div>
-  );
 }
 
 interface DemandRow {
@@ -104,6 +71,97 @@ interface DemandSummary {
   totalRequests: number;
   distinctQueries: number;
   top: DemandRow[];
+}
+
+/**
+ * Minutes an owner spends on one WhatsApp order by hand — reading it, checking
+ * stock, replying, writing it down. Deliberately conservative: a number that
+ * flatters the product is worth nothing to someone deciding whether to keep
+ * paying for it.
+ */
+const MINUTES_SAVED_PER_ORDER = 2;
+
+/** Good, caution, attention. Not a rainbow. */
+const OUTCOME_COLORS = ['#37b699', '#d6a24a', '#df6a52'];
+
+/**
+ * The confidence bands in the owner's language. The thresholds are a real
+ * engineering decision; the owner only needs to know what HAPPENED.
+ */
+const OUTCOMES: Record<string, { title: string; meaning: string }> = {
+  '>= 0.95': {
+    title: 'Ready to send',
+    meaning: 'Confident enough to prepare the order for you',
+  },
+  '0.80 - 0.95': {
+    title: 'Needed your check',
+    meaning: 'Mostly right, worth a glance before you approve',
+  },
+  '< 0.80': {
+    title: 'Asked the customer',
+    meaning: 'Something was unclear, so it asked rather than guessed',
+  },
+};
+
+/**
+ * Provider errors are written for whoever runs the service. "Rate limit
+ * reached for model llama-3.3-70b-versatile in organization org_01kz... on
+ * tokens per day (TPD): Limit 100000, Used 99917" tells a shop owner nothing
+ * they can act on, and reads like a fault they caused.
+ */
+function plainProblem(message: string | null): string {
+  if (!message) return 'A message could not be handled and was skipped.';
+
+  const m = message.toLowerCase();
+
+  if (m.includes('rate limit') || m.includes('quota') || m.includes('tokens per')) {
+    return 'The assistant reached its daily limit and paused. It resumes automatically.';
+  }
+  if (m.includes('timeout') || m.includes('etimedout') || m.includes('abort')) {
+    return 'The assistant took too long to answer and gave up on that message.';
+  }
+  if (m.includes('api key') || m.includes('unauthorized') || m.includes('401')) {
+    return 'The assistant could not sign in to its AI service. Check Settings.';
+  }
+  if (m.includes('econnrefused') || m.includes('network') || m.includes('fetch failed')) {
+    return 'The assistant could not reach its AI service. Usually temporary.';
+  }
+
+  return 'A message could not be handled and was skipped.';
+}
+
+function StatCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  icon: React.ElementType;
+  tone?: 'neutral' | 'good';
+}) {
+  return (
+    <div className="card stat-card">
+      <div className="stat-body">
+        <div className="t-eyebrow">{label}</div>
+        <div className="metric stat-value">{value}</div>
+        <p className="t-muted stat-hint">{hint}</p>
+      </div>
+      <span
+        className="row stat-icon"
+        style={{
+          background: tone === 'good' ? 'var(--success-soft)' : 'var(--brand-soft)',
+          color: tone === 'good' ? 'var(--success)' : 'var(--brand)',
+        }}
+        aria-hidden="true"
+      >
+        <Icon size={17} />
+      </span>
+    </div>
+  );
 }
 
 export default function AiPerformancePage() {
@@ -125,7 +183,7 @@ export default function AiPerformancePage() {
       setDemand(demandRes.data.data);
     } catch (err) {
       console.error(err);
-      setError('Failed to load AI metrics');
+      setError('Could not load your assistant activity. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -137,266 +195,471 @@ export default function AiPerformancePage() {
 
   if (isLoading && !data) {
     return (
-      <div className="row" style={{ justifyContent: 'center', padding: '100px 0' }}>
-        <Loader2 size={28} color="var(--brand)" style={{ animation: 'spin 1s linear infinite' }} />
+      <div className="stack" style={{ gap: 12, alignItems: 'center', padding: '90px 0' }}>
+        <Loader2 size={26} color="var(--brand)" style={{ animation: 'spin 1s linear infinite' }} />
+        <p className="t-muted">Loading your assistant activity…</p>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !data) {
     return (
       <div className="card row" style={{ gap: 10, padding: 24, color: 'var(--danger)' }}>
-        <AlertCircle size={18} /> {error}
+        <AlertCircle size={18} /> {error ?? 'No activity yet.'}
       </div>
     );
   }
 
-  if (!data) return null;
+  const { accuracy, confidence, pipeline } = data;
 
-  const bandChart = data.confidence.bands.map((b) => ({
-    name: b.range,
-    label: b.label,
+  const cleanDrafts = accuracy.drafts - accuracy.corrected;
+  const cleanShare = accuracy.drafts > 0 ? cleanDrafts / accuracy.drafts : null;
+
+  const minutesSaved = accuracy.drafts * MINUTES_SAVED_PER_ORDER;
+  const savedLabel =
+    minutesSaved >= 60 ? `${(minutesSaved / 60).toFixed(1)} hrs` : `${minutesSaved} min`;
+
+  const outcomes = confidence.bands.map((b, i) => ({
+    name: OUTCOMES[b.range]?.title ?? b.label,
+    meaning: OUTCOMES[b.range]?.meaning ?? '',
     count: b.count,
+    fill: OUTCOME_COLORS[i] ?? OUTCOME_COLORS[0],
   }));
+  const totalOutcomes = outcomes.reduce((s, o) => s + o.count, 0);
 
-  // Running on the mock extractor produces canned output, so every number on
-  // this page describes the mock rather than real model quality. Worth saying
-  // plainly instead of letting the figures be read as production accuracy.
+  // Told plainly, rather than handing over a percentage to interpret.
+  const healthy = pipeline.failed === 0 || pipeline.successRate >= 0.9;
+
+  // Demo mode still matters to an owner — it means the figures are not real —
+  // but it should not mention environment variables.
   const mockRuns = data.models
     .filter((m) => m.modelUsed.startsWith('mock'))
     .reduce((sum, m) => sum + m.runs, 0);
-  const mockShare = data.pipeline.totalRuns > 0 ? mockRuns / data.pipeline.totalRuns : 0;
+  const inDemoMode = pipeline.totalRuns > 0 && mockRuns / pipeline.totalRuns > 0.1;
+
+  const demandChart = (demand?.top ?? []).slice(0, 6).map((r) => ({
+    name: r.query.length > 24 ? `${r.query.slice(0, 24)}…` : r.query,
+    customers: r.customers,
+  }));
 
   return (
-    <div className="stack" style={{ gap: 22 }}>
-      {/* Header */}
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+    <div className="stack" style={{ gap: 18 }}>
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <div className="page-head">
         <div>
-          <h1>AI Performance</h1>
-          <div className="sub">
-            Pipeline health and extraction quality over the last {data.period.days} days
-          </div>
+          <h1>Your assistant</h1>
+          <div className="sub">What it handled for you over the last {days} days</div>
         </div>
-        <div className="row" style={{ gap: 10 }}>
-          {[7, 30, 90].map((d) => (
-            <button
-              key={d}
-              className={`btn btn-sm ${days === d ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setDays(d)}
-            >
-              {d}d
-            </button>
-          ))}
+
+        <div className="row head-actions">
+          <div className="row seg" role="group" aria-label="Time period">
+            {[7, 30, 90].map((d) => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                className={`seg-btn${days === d ? ' seg-btn-on' : ''}`}
+                aria-pressed={days === d}
+              >
+                {d} days
+              </button>
+            ))}
+          </div>
           <button className="btn btn-ghost btn-sm" onClick={() => void fetchMetrics()}>
-            <RefreshCw size={14} /> Refresh
+            <RefreshCw size={13} /> Refresh
           </button>
         </div>
       </div>
 
-      {mockShare > 0 && (
-        <div className="card row" style={{ gap: 10, padding: 14, alignItems: 'flex-start' }}>
-          <Sparkles size={16} style={{ color: 'var(--warn, #d6a24a)', flexShrink: 0, marginTop: 2 }} />
-          <div style={{ fontSize: '0.85rem' }}>
-            <strong>{pct(mockShare)} of runs used the mock extractor.</strong>{' '}
-            <span className="t-muted">
-              Mock output is canned, so these figures measure the mock — not real model
-              quality. Set GEMINI_API_KEY to get meaningful numbers.
-            </span>
-          </div>
+      {/* ── Demo notice ────────────────────────────────────────── */}
+      {inDemoMode && (
+        <div className="card row notice">
+          <Sparkles size={16} className="notice-icon" aria-hidden="true" />
+          <p className="notice-text">
+            <strong>Demo mode.</strong> Some replies came from built-in sample
+            answers rather than the real assistant, so the numbers below are
+            practice data. Connect your AI service in Settings to see real
+            results.
+          </p>
         </div>
       )}
 
-      {/* Headline stats */}
-      <div className="grid-auto">
+      {/* ── Status ─────────────────────────────────────────────── */}
+      <div
+        className="card row status"
+        style={{
+          background: healthy ? 'var(--success-soft)' : 'var(--warning-soft)',
+          borderColor: healthy ? 'var(--brand-line)' : 'var(--warning)',
+        }}
+      >
+        <span
+          className="row status-icon"
+          style={{ color: healthy ? 'var(--success)' : 'var(--warning)' }}
+          aria-hidden="true"
+        >
+          {healthy ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+        </span>
+        <div>
+          <strong className="status-title">
+            {healthy ? 'Working normally' : 'Having some trouble'}
+          </strong>
+          <p className="t-muted status-text">
+            {healthy
+              ? 'Reading your messages and preparing orders as expected.'
+              : 'Some messages were skipped. Nothing is lost — they just need handling the usual way.'}
+          </p>
+        </div>
+      </div>
+
+      {/* ── The numbers that matter ────────────────────────────── */}
+      <div className="stat-grid">
         <StatCard
-          label="Owner correction rate"
-          value={pct(data.accuracy.correctionRate)}
-          hint={`${data.accuracy.corrected} of ${data.accuracy.drafts} drafts needed an edit before approval`}
-          icon={Bot}
+          label="Orders prepared"
+          value={String(accuracy.drafts)}
+          hint="Messages turned into an order for you"
+          icon={Inbox}
         />
         <StatCard
-          label="Pipeline success"
-          value={pct(data.pipeline.successRate)}
-          hint={`${data.pipeline.failed} failed of ${data.pipeline.totalRuns} stage runs`}
-          icon={Activity}
-        />
-        <StatCard
-          label="Average confidence"
-          value={data.confidence.average === null ? '—' : data.confidence.average.toFixed(2)}
-          hint={`${data.confidence.scored} orders scored`}
+          label="Right first time"
+          value={cleanShare === null ? '—' : `${Math.round(cleanShare * 100)}%`}
+          hint={
+            accuracy.drafts === 0
+              ? 'No orders yet in this period'
+              : `${cleanDrafts} of ${accuracy.drafts} needed no changes`
+          }
           icon={CheckCircle}
+          tone="good"
         />
         <StatCard
-          label="Tokens used"
-          value={data.tokens.total.toLocaleString()}
-          hint={`${data.accuracy.approved} approved · ${data.accuracy.rejected} rejected · ${data.accuracy.pending} pending`}
-          icon={Zap}
+          label="Time saved"
+          value={savedLabel}
+          hint={`About ${MINUTES_SAVED_PER_ORDER} minutes per order you did not type`}
+          icon={Clock}
+        />
+        <StatCard
+          label="Waiting for you"
+          value={String(accuracy.pending)}
+          hint="Sitting in your approval queue now"
+          icon={AlertCircle}
         />
       </div>
 
-      {/* Confidence distribution */}
-      <div className="card stack" style={{ gap: 14, padding: 22 }}>
-        <div>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>Confidence distribution</h3>
-          <div className="t-muted" style={{ fontSize: '0.8rem' }}>
-            Bands defined by BUSINESS_RULES §10 — below 0.80 returns to the customer for
-            clarification, 0.80–0.95 needs owner review, 0.95+ is auto-approve eligible.
-          </div>
-        </div>
-        {data.confidence.scored === 0 ? (
-          <div className="t-muted" style={{ padding: '30px 0', textAlign: 'center' }}>
-            No orders scored in this period.
-          </div>
+      {/* ── Outcomes ───────────────────────────────────────────── */}
+      <div className="card">
+        <h2 className="sec-title">What happened to each order</h2>
+        <p className="t-muted sec-sub">
+          The assistant only prepares an order it is sure about. When it is not
+          sure, it asks you — or asks the customer — instead of guessing.
+        </p>
+
+        {totalOutcomes === 0 ? (
+          <p className="t-muted empty">
+            No orders in this period yet. Send a test message from the WhatsApp
+            page to see this fill in.
+          </p>
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={bandChart}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="name" stroke="var(--ink-3)" fontSize={12} />
-              <YAxis stroke="var(--ink-3)" fontSize={12} allowDecimals={false} />
-              <Tooltip
-                cursor={{ fill: 'var(--surface-3)' }}
-                contentStyle={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8 }}
-                // The x-axis shows the numeric range; the tooltip label spells
-                // out which §10 band that range means.
-                labelFormatter={(range) =>
-                  bandChart.find((b) => b.name === range)?.label ?? String(range)
-                }
-                formatter={(value) => [String(value), 'Orders']}
-              />
-              <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                {bandChart.map((_, i) => (
-                  <Cell key={i} fill={BAND_COLORS[i]} />
+          <>
+            <div
+              className="row bar"
+              role="img"
+              aria-label={outcomes.map((o) => `${o.name}: ${o.count}`).join(', ')}
+            >
+              {outcomes
+                .filter((o) => o.count > 0)
+                .map((o) => (
+                  <div
+                    key={o.name}
+                    className="bar-seg"
+                    style={{ flexGrow: o.count, background: o.fill }}
+                    title={`${o.name}: ${o.count}`}
+                  />
                 ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+            </div>
+
+            <ul className="legend">
+              {outcomes.map((o) => (
+                <li key={o.name} className="legend-item">
+                  <span className="swatch" style={{ background: o.fill }} aria-hidden="true" />
+                  <div className="legend-copy">
+                    <div className="legend-head">
+                      <strong>{o.name}</strong>
+                      <span className="legend-count">{o.count}</span>
+                    </div>
+                    <p className="t-muted legend-meaning">{o.meaning}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
 
-      {/* Stage health */}
-      <div className="card table-scroll">
-        <div style={{ padding: '18px 22px 0' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>Pipeline stages</h3>
-          <div className="t-muted" style={{ fontSize: '0.8rem' }}>
-            p95 latency matters more than the average — the tail is what customers feel.
-          </div>
-        </div>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Stage</th><th>Runs</th><th>Failed</th><th>Success</th><th>Avg</th><th>p95</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.pipeline.byStage.length === 0 ? (
-              <tr><td colSpan={6} className="t-muted" style={{ textAlign: 'center', padding: 30 }}>
-                No pipeline activity in this period.
-              </td></tr>
-            ) : (
-              data.pipeline.byStage.map((s) => (
-                <tr key={s.stage}>
-                  <td>{humanStage(s.stage)}</td>
-                  <td>{s.runs}</td>
-                  <td style={{ color: s.failed > 0 ? 'var(--danger)' : undefined }}>{s.failed}</td>
-                  <td>{pct(s.successRate)}</td>
-                  <td>{s.avgMs} ms</td>
-                  <td>{s.p95Ms} ms</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* ── Missed demand ──────────────────────────────────────── */}
+      <div className="card">
+        <h2 className="sec-title">
+          <Search size={15} aria-hidden="true" />
+          What customers asked for that you don&apos;t sell
+        </h2>
+        <p className="t-muted sec-sub">
+          Ranked by how many different people asked. Five people asking once
+          each is a stronger signal than one person asking five times.
+        </p>
+
+        {demandChart.length === 0 ? (
+          <p className="t-muted empty">
+            Nothing missed in this period — every request found a product.
+          </p>
+        ) : (
+          <>
+            <div className="chart" aria-hidden="true">
+              <ResponsiveContainer width="100%" height={Math.max(150, demandChart.length * 46)}>
+                <BarChart
+                  data={demandChart}
+                  layout="vertical"
+                  margin={{ top: 4, right: 20, bottom: 4, left: 0 }}
+                >
+                  <XAxis type="number" hide allowDecimals={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={140}
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fill: 'var(--ink-2)', fontSize: 12 }}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'var(--surface-3)' }}
+                    contentStyle={{
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 10,
+                      fontSize: '0.8125rem',
+                    }}
+                    formatter={(v) => [`${String(v)} asked`, '']}
+                  />
+                  <Bar dataKey="customers" radius={[0, 6, 6, 0]} barSize={16}>
+                    {demandChart.map((_, i) => (
+                      <Cell key={i} fill="var(--brand)" />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="t-muted foot">
+              Consider stocking the items at the top — customers are already
+              asking for them.
+            </p>
+          </>
+        )}
       </div>
 
-      {/* Unfulfilled demand — a stocking signal, not an error list */}
-      <div className="card table-scroll">
-        <div style={{ padding: '18px 22px 0' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>
-            Customers asked for products you don&apos;t have
-          </h3>
-          <div className="t-muted" style={{ fontSize: '0.8rem' }}>
-            {demand && demand.totalRequests > 0
-              ? `${demand.totalRequests} requests across ${demand.distinctQueries} products the catalogue could not match. Ranked by number of distinct customers — five people asking once each is a stronger signal than one person asking five times.`
-              : 'Every request the AI cannot match is recorded here.'}
-          </div>
-        </div>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>They asked for</th><th>Customers</th><th>Requests</th><th>Why</th><th>Last asked</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!demand || demand.top.length === 0 ? (
-              <tr><td colSpan={5} className="t-muted" style={{ textAlign: 'center', padding: 30 }}>
-                Nothing unmatched in this period — every request found a product.
-              </td></tr>
-            ) : (
-              demand.top.map((d) => (
-                <tr key={`${d.query}-${d.reason}`}>
-                  <td style={{ fontWeight: 500 }}>{d.query}</td>
-                  <td>{d.customers}</td>
-                  <td>{d.requests}</td>
-                  <td className="t-muted" style={{ fontSize: '0.8rem' }}>
-                    {d.reason === 'EMPTY_CATALOG'
-                      ? 'No products synced'
-                      : d.reason === 'OUT_OF_STOCK'
-                        ? 'Out of stock'
-                        : 'Not in catalogue'}
-                  </td>
-                  <td className="t-muted" style={{ fontSize: '0.8rem' }}>
-                    {new Date(d.lastAskedAt).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* ── Problems, only when there are any ──────────────────── */}
+      {data.recentFailures.length > 0 && (
+        <div className="card">
+          <h2 className="sec-title">Recent problems</h2>
+          <p className="t-muted sec-sub">
+            Messages the assistant could not handle. Nothing was lost — these
+            just need handling the usual way.
+          </p>
 
-      {/* Models + recent failures */}
-      <div className="ai-split">
-        <div className="card stack" style={{ gap: 12, padding: 22 }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>Models used</h3>
-          {data.models.length === 0 ? (
-            <div className="t-muted">No runs in this period.</div>
-          ) : (
-            data.models.map((m) => (
-              <div key={m.modelUsed} className="row" style={{ justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.875rem' }}>{m.modelUsed}</span>
-                <span className="t-muted" style={{ fontSize: '0.875rem' }}>{m.runs} runs</span>
-              </div>
-            ))
-          )}
+          <ul className="problems">
+            {[
+              ...new Map(
+                data.recentFailures.map((f) => [plainProblem(f.errorMessage), f]),
+              ).entries(),
+            ]
+              .slice(0, 4)
+              .map(([text, f]) => (
+                <li key={text} className="problem">
+                  <AlertCircle size={14} className="problem-icon" aria-hidden="true" />
+                  <div>
+                    <p className="problem-text">{text}</p>
+                    <time className="t-muted problem-time">
+                      {new Date(f.at).toLocaleString()}
+                    </time>
+                  </div>
+                </li>
+              ))}
+          </ul>
         </div>
-
-        <div className="card stack" style={{ gap: 12, padding: 22 }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>Recent failures</h3>
-          {data.recentFailures.length === 0 ? (
-            <div className="t-muted">No failures — nothing to investigate.</div>
-          ) : (
-            data.recentFailures.map((f, i) => (
-              <div key={i} className="stack" style={{ gap: 2 }}>
-                <div className="row" style={{ gap: 8, justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{humanStage(f.stage)}</span>
-                  <span className="t-muted" style={{ fontSize: '0.75rem' }}>
-                    {new Date(f.at).toLocaleString()}
-                  </span>
-                </div>
-                <div className="t-muted" style={{ fontSize: '0.78rem' }}>
-                  {f.errorMessage ?? 'No error message recorded'}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+      )}
 
       <style jsx>{`
-        .ai-split {
+        .head-actions {
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        /* One segmented control rather than three loose buttons. */
+        .seg {
+          gap: 2px;
+          padding: 3px;
+          background: var(--surface-3);
+          border-radius: var(--r-md);
+        }
+        .seg-btn {
+          padding: 8px 13px;
+          border: none;
+          background: transparent;
+          border-radius: calc(var(--r-md) - 3px);
+          font-family: inherit;
+          font-size: 0.8125rem;
+          font-weight: 550;
+          color: var(--ink-2);
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .seg-btn-on {
+          background: var(--surface-1);
+          color: var(--ink);
+          box-shadow: var(--shadow-sm);
+        }
+
+        .notice {
+          gap: 11px;
+          align-items: flex-start;
+          padding: 14px 16px;
+          background: var(--warning-soft);
+          border-color: var(--warning);
+        }
+        .notice-icon {
+          color: var(--warning);
+          flex-shrink: 0;
+          margin-top: 2px;
+        }
+        .notice-text {
+          font-size: 0.8125rem;
+          line-height: 1.5;
+          max-width: 70ch;
+        }
+
+        .status {
+          gap: 12px;
+          align-items: flex-start;
+          padding: 15px 17px;
+        }
+        .status-icon {
+          flex-shrink: 0;
+          margin-top: 1px;
+        }
+        .status-title {
+          font-size: 0.9375rem;
+        }
+        .status-text {
+          font-size: 0.8125rem;
+          margin-top: 3px;
+          max-width: 62ch;
+        }
+
+        .sec-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 1.0625rem;
+          font-weight: 600;
+          margin-bottom: 5px;
+        }
+        .sec-sub {
+          font-size: 0.8125rem;
+          line-height: 1.5;
+          margin-bottom: 18px;
+          max-width: 68ch;
+        }
+        .empty {
+          font-size: 0.875rem;
+          padding: 16px 0;
+        }
+
+        /* Proportion bar: the split is legible instantly, with no axis to read
+           and nothing to shrink on a phone. */
+        .bar {
+          height: 12px;
+          border-radius: 999px;
+          overflow: hidden;
+          gap: 2px;
+          margin-bottom: 20px;
+        }
+        .bar-seg {
+          height: 100%;
+          min-width: 4px;
+        }
+
+        .legend {
+          list-style: none;
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-          gap: 16px;
+          grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+          gap: 15px;
+          margin: 0;
+          padding: 0;
+        }
+        .legend-item {
+          display: flex;
+          gap: 10px;
+          align-items: flex-start;
+        }
+        .swatch {
+          width: 10px;
+          height: 10px;
+          border-radius: 3px;
+          margin-top: 5px;
+          flex-shrink: 0;
+        }
+        .legend-copy {
+          min-width: 0;
+        }
+        .legend-head {
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+        }
+        .legend-count {
+          font-variant-numeric: tabular-nums;
+          font-weight: 600;
+          color: var(--ink-2);
+        }
+        .legend-meaning {
+          font-size: 0.75rem;
+          line-height: 1.45;
+          margin-top: 2px;
+        }
+
+        .chart {
+          margin-left: -8px;
+        }
+        .foot {
+          font-size: 0.75rem;
+          margin-top: 12px;
+        }
+
+        .problems {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          gap: 13px;
+        }
+        .problem {
+          display: flex;
+          gap: 10px;
+          align-items: flex-start;
+        }
+        .problem-icon {
+          color: var(--warning);
+          flex-shrink: 0;
+          margin-top: 2px;
+        }
+        .problem-text {
+          font-size: 0.875rem;
+          line-height: 1.45;
+        }
+        .problem-time {
+          font-size: 0.75rem;
+        }
+
+        @media (max-width: 640px) {
+          /* Product names need the room more than the axis does. */
+          .chart {
+            margin-left: -14px;
+          }
         }
       `}</style>
     </div>

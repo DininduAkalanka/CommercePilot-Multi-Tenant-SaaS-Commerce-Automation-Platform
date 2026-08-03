@@ -16,12 +16,14 @@ test.describe('AI Performance', () => {
 
     await page.goto('/dashboard/ai-performance');
 
-    await expect(page.getByRole('heading', { name: 'AI Performance' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your assistant' })).toBeVisible();
 
     // A tenant with no traffic must render zeros, not crash or divide by zero.
-    await expect(page.getByText('No pipeline activity in this period.')).toBeVisible();
-    await expect(page.getByText('No failures — nothing to investigate.')).toBeVisible();
-    await expect(page.getByText('Owner correction rate')).toBeVisible();
+    await expect(page.getByText('Orders prepared')).toBeVisible();
+    await expect(page.getByText('Right first time')).toBeVisible();
+    await expect(
+      page.getByText('No orders in this period yet.', { exact: false }),
+    ).toBeVisible();
   });
 
   test('reflects real pipeline activity after a customer message', async ({ page }) => {
@@ -39,15 +41,14 @@ test.describe('AI Performance', () => {
     });
 
     await page.goto('/dashboard/ai-performance');
-    await expect(page.getByRole('heading', { name: 'AI Performance' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your assistant' })).toBeVisible();
 
-    // The stage table should now list real runs. Processing is async via
-    // BullMQ, so allow the pipeline time to land its rows.
-    await expect(page.getByText('Intent Detection')).toBeVisible({ timeout: 15_000 });
+    // Processing is async via BullMQ, so allow the pipeline time to land rows.
+    await expect(page.getByText('Orders prepared')).toBeVisible({ timeout: 15_000 });
 
-    // Running without a GEMINI_API_KEY must be called out rather than letting
-    // mock output be mistaken for real model quality.
-    await expect(page.getByText(/used the mock extractor/i)).toBeVisible();
+    // Canned answers must be called out rather than letting practice figures
+    // be mistaken for real performance — in the owner's words, not ours.
+    await expect(page.getByText(/demo mode/i)).toBeVisible({ timeout: 15_000 });
   });
 
   test('the metrics endpoint is not readable without a token', async ({ request }) => {

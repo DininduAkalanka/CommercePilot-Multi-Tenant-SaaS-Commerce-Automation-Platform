@@ -493,3 +493,51 @@ label { font-size: 0.8125rem; font-weight: 500; color: var(--ink-2); }
     min-height: 44px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   STAT CARD — dashboard KPI primitive
+   Lives here rather than in a page's styled-jsx block because the card is
+   rendered by a component declared outside that page. styled-jsx only scopes
+   JSX written inside the component holding the <style jsx> tag, so those
+   rules silently never applied — the card rendered as display:block with the
+   icon wrapping under the text.
+   ═══════════════════════════════════════════════════════════════════ */
+.stat-grid {
+  display: grid;
+  /* Auto-fit: four cards become two, then one, with no breakpoint per layout. */
+  grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+  gap: 13px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 19px;
+}
+
+.stat-card .stat-body { min-width: 0; }
+
+.stat-card .stat-value {
+  font-size: 1.75rem;
+  margin-top: 8px;
+}
+
+.stat-card .stat-hint {
+  font-size: 0.75rem;
+  margin-top: 6px;
+  line-height: 1.45;
+}
+
+.stat-card .stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .stat-card .stat-value { font-size: 1.5rem; }
+}
