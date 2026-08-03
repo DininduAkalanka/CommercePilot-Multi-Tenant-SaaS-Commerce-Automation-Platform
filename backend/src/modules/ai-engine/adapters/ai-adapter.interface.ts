@@ -50,13 +50,6 @@ export interface AiAdapter {
   ): Promise<AiResponse>;
 
   /**
-   * `null` means "no embedding available" — not an error, and never a
-   * fabricated vector. Callers degrade to text search, which is correct and
-   * visible. Providers without embedding models (Groq) always return null.
-   */
-  generateEmbedding(text: string): Promise<number[] | null>;
-
-  /**
    * Parse a model's text response as JSON. Throws on genuinely invalid JSON,
    * which callers already handle as a failed extraction.
    */

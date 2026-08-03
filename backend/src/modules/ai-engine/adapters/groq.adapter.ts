@@ -23,12 +23,8 @@ import {
  * SDK — the payload shape was confirmed by hand, and an SDK would add a
  * dependency for one HTTP POST.
  *
- * ## Groq has no embedding models
- *
- * `generateEmbedding` always returns null. RAG product search therefore
- * degrades to text search while Groq is the provider. That is a real
- * limitation, not an oversight — see the method for why null beats the
- * alternatives.
+ * Text generation only. Groq serves no embedding models, so embeddings come
+ * from a separate `EmbeddingProvider` — see embedding-provider.interface.ts.
  */
 @Injectable()
 export class GroqAdapter implements AiAdapter {
@@ -135,26 +131,6 @@ export class GroqAdapter implements AiAdapter {
 
   parseJsonResponse<T>(text: string): T {
     return parseJsonFromModelText<T>(text);
-  }
-
-  /**
-   * Always null: Groq serves no embedding models (confirmed against the live
-   * models endpoint — 15 models, none supporting embeddings).
-   *
-   * The alternatives are worse. Throwing would break indexing for a limitation
-   * that is expected and permanent. Returning a random or zero vector would be
-   * far worse still: pgvector would happily rank against it, so every product
-   * search would return confident nonsense with nothing in the logs to explain
-   * it. Null is already the contract's "no embedding available" signal, and
-   * callers fall back to text search.
-   */
-  async generateEmbedding(_text: string): Promise<number[] | null> {
-    this.logger.debug(
-      'Groq provides no embedding models — no embedding generated ' +
-        '(product search will use text matching)',
-    );
-
-    return Promise.resolve(null);
   }
 
   // ── internals ───────────────────────────────────────────────────

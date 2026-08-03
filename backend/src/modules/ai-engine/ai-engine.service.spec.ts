@@ -4,6 +4,7 @@ import { PrismaService } from '../../common/database/prisma.service';
 import { AI_ADAPTER } from './adapters/ai-adapter.interface';
 import { IntentDetectorService } from './pipeline/intent-detector.service';
 import { ProductRetrieverService } from './pipeline/product-retriever.service';
+import { QueryNormalizerService } from './pipeline/query-normalizer.service';
 import { EntityExtractorService } from './pipeline/entity-extractor.service';
 import { ConfidenceScorerService } from './pipeline/confidence-scorer.service';
 import { UnfulfilledDemandService } from './unfulfilled-demand.service';
@@ -36,6 +37,12 @@ describe('AiEngineService', () => {
   const mockAi = {
     generateContent: jest.fn(),
     generateEmbedding: jest.fn(),
+  };
+
+  // Pass-through by default: these tests cover pipeline orchestration, not
+  // translation. QueryNormalizerService has its own suite.
+  const mockQueryNormalizer = {
+    normalize: jest.fn((m: string) => Promise.resolve(m)),
   };
 
   const mockIntentDetector = {
@@ -72,6 +79,7 @@ describe('AiEngineService', () => {
         AiEngineService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AI_ADAPTER, useValue: mockAi },
+        { provide: QueryNormalizerService, useValue: mockQueryNormalizer },
         { provide: IntentDetectorService, useValue: mockIntentDetector },
         { provide: ProductRetrieverService, useValue: mockProductRetriever },
         { provide: EntityExtractorService, useValue: mockEntityExtractor },
@@ -441,6 +449,46 @@ describe('AiEngineService', () => {
         expect.objectContaining({
           tenantId: 'tenant-1',
         }),
+      );
+    });
+  });
+
+  describe('query normalisation', () => {
+    it('retrieves on the normalised query but extracts from the original', async () => {
+      // The two stages need different things. Retrieval needs a short English
+      // phrase, because Sinhala tokenises to nothing and embeds as noise.
+      // Extraction needs the untouched message: normalisation deliberately
+      // discards quantity, size and politeness, and a draft built from
+      // "blue shirt" would silently lose the "2" the customer asked for.
+      mockIntentDetector.detect.mockResolvedValue({
+        intent: 'ORDER',
+        confidence: 0.95,
+      });
+      mockQueryNormalizer.normalize.mockResolvedValue('blue shirt');
+
+      await service.processMessage({
+        tenantId: 'tenant-1',
+        customerId: 'cust-1',
+        messageId: 'msg-1',
+        messageText: 'මට නිල් ෂර්ට් 2ක් ඕන',
+        autoApproveEnabled: false,
+        autoApproveThreshold: 0.95,
+        aiConfidenceThreshold: 0.8,
+      });
+
+      expect(mockProductRetriever.retrieve).toHaveBeenCalledWith(
+        'tenant-1',
+        'msg-1',
+        'blue shirt',
+        undefined,
+      );
+
+      expect(mockEntityExtractor.extract).toHaveBeenCalledWith(
+        'tenant-1',
+        'msg-1',
+        'මට නිල් ෂර්ට් 2ක් ඕන',
+        expect.anything(),
+        expect.anything(),
       );
     });
   });
