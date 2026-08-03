@@ -99,9 +99,111 @@ jobs:
   # ── Deploy: backend to Render (only on green main pushes) ─────────────────
   # The frontend is deployed by Vercel's Git integration (production on main,
   # preview on every PR) — see DEPLOYMENT.md.
+  e2e:
+    name: E2E · Playwright
+    runs-on: ubuntu-latest
+    needs: [backend-ci, frontend-ci]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: commercepilot
+          POSTGRES_PASSWORD: commercepilot_ci
+          POSTGRES_DB: commercepilot_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U commercepilot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://commercepilot:commercepilot_ci@localhost:5432/commercepilot_e2e?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      NODE_ENV: production
+      JWT_SECRET: ci_only_dummy_jwt_secret_0123456789abcdef0123456789abcdef
+      ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      # No provider key on purpose: the suite must pass on the canned mock, so
+      # it stays deterministic and costs no API quota. It also means a broken
+      # mock fails CI — which is exactly what went unnoticed when the Groq
+      # migration replaced the stage-aware mock with a placeholder.
+      GROQ_API_KEY: ''
+      # The suite registers a tenant per test; the production default of 5/min
+      # would throttle it into failure from the fourth test onward.
+      AUTH_RATE_LIMIT: '1000'
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Apply migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Start backend
+        working-directory: backend
+        run: npm run start:prod &
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Start frontend
+        working-directory: frontend
+        run: npm run start &
+
+      - name: Wait for both services
+        run: |
+          npx --yes wait-on http://localhost:3001/api/v1/health http://localhost:3000 --timeout 120000
+
+      - name: Run E2E suite
+        working-directory: frontend
+        run: npx playwright test --reporter=list
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
   deploy-backend:
     name: Deploy backend (Render)
-    needs: [backend-ci, frontend-ci]
+    needs: [backend-ci, frontend-ci, e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
