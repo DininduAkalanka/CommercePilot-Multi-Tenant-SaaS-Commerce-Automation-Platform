@@ -7,6 +7,75 @@
 
 ---
 
+## 0. Verified state — 2026-08-03
+
+Feature work paused here deliberately. Everything below was checked on this
+date, not assumed.
+
+### Green
+
+| Check | Result |
+|---|---|
+| Backend suite | 364/364 |
+| TypeScript / ESLint | 0 errors |
+| Frontend build | compiles clean |
+| Migrations, fresh database | 7 applied, "schema is up to date" |
+| Schema drift | only the pgvector HNSW index, which Prisma cannot express |
+| Production `/health` | 200 |
+| Production `/products`, `/products/:id/variants` | 401 — deployed and protected |
+| Production `/api/docs` | 404 — still hardened |
+| Repo | `main` clean, no unmerged feature branches |
+
+### ⚠️ The blocker that matters: Groq free-tier capacity
+
+Measured from real eval runs, not estimated:
+
+- One customer message costs **~3,250 tokens** (intent ~2,300 + extraction ~950).
+  The catalogue context dominates both prompts.
+- Groq free tier: **12,000 tokens/minute** and **100,000 tokens/day**.
+
+That is **~30 messages per day** and **~3 per minute**, shared across every
+tenant and consumed by eval runs too.
+
+A single WhatsApp-first shop will exceed 30 messages a day. The product is
+functionally complete but **cannot serve real traffic on the free tier**.
+
+Before going live, one of these has to happen:
+1. Groq Dev Tier (paid) — needs a card, the same obstacle that ruled out Gemini.
+2. Cut tokens per message. The catalogue context is the cost driver: send only
+   the top 3 retrieved products instead of the full context, and drop the
+   separate intent call by folding intent into the extraction response. Rough
+   estimate: 3,250 -> under 1,000 tokens, so ~100 messages/day.
+3. A provider with a larger free allowance.
+
+Option 2 is real engineering with no cost, and is the first thing to do when
+work resumes.
+
+### Never exercised in production
+
+Built, merged and tested, but not yet run against real traffic:
+
+- Soft alternatives (2.5)
+- Query normalisation
+- Variant backfill — `npm run backfill:variants` has **not** been run
+- Variant stock reads — `VARIANT_STOCK_ENABLED` **not** set
+- Groq in production — the `[AiProvider] Using Groq` log line was never confirmed
+
+### Known limitations
+
+- **Extraction accuracy 45.8%** on 24 invented messages. Not a measure of real
+  traffic; that needs 50+ actual customer messages in `eval/dataset.csv`.
+  Known failure classes: price questions read as ORDER, Singlish quantities
+  dropped (`2k`, `3k`), colours occasionally missed.
+- **Semantic search is off.** The Jina key has zero balance, so
+  `EMBEDDING_PROVIDER=none` and product search uses text matching.
+- **Voice notes are dropped silently.** `processMessage` skips non-TEXT
+  messages, so the customer gets no reply. Whisper is available on the
+  existing Groq key (verified) — but see the capacity blocker above.
+- **WooCommerce `getProducts()` fetches page 1 only.** Latent while every
+  tenant is on `MOCK`; a live shop with >1 page would have a silently
+  incomplete catalogue.
+
 ## 1. Status at a glance
 
 | Phase | Status |
