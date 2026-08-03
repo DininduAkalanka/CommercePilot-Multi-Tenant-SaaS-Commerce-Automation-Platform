@@ -66,6 +66,7 @@ model Tenant {
   auditLogs             AuditLog[]
   conversations         Conversation[]
   unfulfilledDemand     UnfulfilledDemand[]
+  productVariants       ProductVariant[]
 
   @@map("tenants")
 }
@@ -170,12 +171,71 @@ model Product {
   orderItems            OrderItem[]
   inventoryTransactions InventoryTransaction[]
   aiDraftOrderItems     AIDraftOrderItem[]
+  variants              ProductVariant[]
 
   @@unique([tenantId, sku])
   @@index([tenantId])
   @@index([sku])
   @@index([tenantId, isActive])
   @@map("products")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// PRODUCT VARIANT — Per-combination stock (size × colour × …)
+//
+// `Product.stockQuantity` is a single integer, and `Product.attributes` lists
+// which options exist without attaching stock to any of them. So the catalog
+// can say "this shirt has 12 units" but never "blue in L has 3" — and telling
+// a customer a variant is available when it is not is worse than saying
+// nothing, because it promises stock that cannot ship.
+//
+// Every product gets at least one variant, including simple ones (a single
+// "default" variant carrying its stock). One code path everywhere beats
+// branching on whether a product happens to have options.
+//
+// Maps onto WooCommerce variations, so `woocommerceId` here is a variation id,
+// not a product id.
+// ─────────────────────────────────────────────────────────────────
+model ProductVariant {
+  id        String @id @default(uuid()) @db.Uuid
+  tenantId  String @db.Uuid
+  productId String @db.Uuid
+
+  /// The chosen options, e.g. { "size": "L", "color": "blue" }.
+  /// Empty object for a simple product's default variant.
+  attributes Json
+
+  /// Canonical form of `attributes` — sorted, lowercased, `color=blue|size=l`.
+  /// Exists so the database can enforce that one product cannot have two
+  /// variants for the same combination. Comparing raw JSON could not: key
+  /// order and casing differ between WooCommerce, the dashboard and the AI.
+  attributeKey String
+
+  sku String?
+
+  /// Null means "inherit the product price" rather than "free" — most
+  /// variants cost the same, and duplicating the price would let the two
+  /// drift apart.
+  price Decimal? @db.Decimal(12, 2)
+
+  stockQuantity Int     @default(0)
+  isActive      Boolean @default(true)
+
+  /// WooCommerce *variation* id.
+  woocommerceId String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, attributeKey])
+  @@index([tenantId, productId])
+  @@index([productId, isActive])
+  @@index([tenantId, sku])
+  @@map("product_variants")
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -236,6 +296,10 @@ model OrderItem {
   tenantId  String  @db.Uuid
   orderId   String  @db.Uuid
   productId String  @db.Uuid
+
+  /// Which variant was ordered. Nullable during the migration to variant
+  /// stock — historical rows predate variants and keep working unchanged.
+  variantId String? @db.Uuid
   quantity  Int
   unitPrice Decimal @db.Decimal(12, 2)
   subtotal  Decimal @db.Decimal(12, 2)
@@ -434,6 +498,11 @@ model AIDraftOrderItem {
   tenantId     String  @db.Uuid
   draftOrderId String  @db.Uuid
   productId    String? @db.Uuid // null if AI couldn't match a product
+
+  /// Which variant the customer chose. Nullable during the migration to
+  /// variant stock, and also null whenever the AI matched a product but not a
+  /// specific size/colour.
+  variantId    String? @db.Uuid
 
   // What the customer asked for (raw)
   productQuery String

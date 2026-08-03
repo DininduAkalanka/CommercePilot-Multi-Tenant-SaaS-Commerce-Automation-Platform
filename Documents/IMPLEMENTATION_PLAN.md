@@ -13,8 +13,8 @@
 |---|---|
 | **Pre-work** — audit remediation | ✅ Complete · merged · live |
 | **Phase 0** — Instrument & measure | ✅ Complete · merged · live |
-| **Phase 1** — `ProductVariant` | ⬜ Not started — **launch prerequisite** |
-| **Phase 2** — Stop losing orders | 🟡 3 of 6 · merged · live |
+| **Phase 1** — `ProductVariant` | 🟡 PR1 of 4 · **awaiting merge** — launch prerequisite |
+| **Phase 2** — Stop losing orders | 🟡 3 of 6 merged · 2.4 awaiting merge |
 | **Phase 3** — Sinhala / Singlish | ⬜ Blocked on eval dataset |
 | **Phase 4** — Voice & images | ⬜ Not started |
 | **Phase 5** — Scale out | ⬜ Trigger-based — no trigger fired yet |
@@ -83,7 +83,7 @@ Found by a full audit on 2026-08-02. All fixed, merged and deployed.
       See `backend/eval/README.md`: export WhatsApp chats, anonymise phone
       numbers and addresses per SECURITY.md §3, match your real language mix.
 
-### ⬜ Phase 1 — `ProductVariant` (not started)
+### 🟡 Phase 1 — `ProductVariant` (PR1 done, PR2–PR4 pending)
 
 > **Launch prerequisite.** Must land **before** `WHATSAPP_PROVIDER` comes off
 > mock. Once real stock is moving, this migration needs a maintenance window
@@ -99,8 +99,16 @@ WooCommerce with no size/colour.
 
 **Ship as 4 PRs (expand/contract). Nothing destructive at any step:**
 
-- [ ] **PR1 Expand** — add `ProductVariant` + nullable `variantId` on
+- [x] **PR1 Expand** — add `ProductVariant` + nullable `variantId` on
       `OrderItem`/`AIDraftOrderItem`. Nothing reads them. *Risk: none.*
+      **Done** — branch `feat/product-variant-expand`, commit `105ea94`.
+      Migration `20260803180000_add_product_variant`, `ProductVariantService`
+      (23 tests, written first), suite 210 → 233.
+      Variants are keyed by a canonical `attributeKey` (`color=blue|size=l`)
+      with `@@unique([productId, attributeKey])`, so the **database** rejects
+      duplicate combinations rather than each write path remembering to check.
+      Verified on `pgvector/pg16`: unique index rejects a colliding
+      combination, product FK cascades, image migrates and boots clean.
 - [ ] **PR2 Backfill + dual-write** — one default variant per product carrying
       current stock; write stock to both. *Risk: low.*
 - [ ] **PR3 Switch reads** behind `VARIANT_STOCK_ENABLED` — `validateStock`,
@@ -132,10 +140,12 @@ Measure with the eval harness before and after.
       `HANDOFF_ENABLED=false` restores old behaviour with no deploy.
 - [x] **2.3 `UnfulfilledDemand`** — every unmatched request logged. Report at
       `GET /api/v1/ai-engine/unfulfilled-demand`, ranked by *distinct customers*.
-- [ ] **2.4 Duplicate detection (§18)** — ~0.5 day. Only message-level dedup
-      exists (`externalMessageId`). An impatient customer sending "2 shirts"
-      twice creates **two real WooCommerce orders**. Check customer + product +
-      qty within N minutes → flag `POTENTIAL_DUPLICATE` for review, don't auto-block.
+- [ ] **2.4 Duplicate detection (§18)** — **built, awaiting your merge**:
+      branch `feat/duplicate-detection`, commit `2d42a50`. Only message-level
+      dedup existed (`externalMessageId`); an impatient customer sending
+      "2 shirts" twice creates **two real WooCommerce orders**. Now checks
+      customer + product + qty within N minutes → flags `POTENTIAL_DUPLICATE`
+      for review rather than auto-blocking.
 - [ ] **2.5 Soft alternatives** — acknowledge the miss honestly, then offer
       2–3 close matches. Not a catalogue dump.
 - [ ] **2.6 Friendly tone prompts** — warm, customer's language, no robotic
@@ -275,10 +285,14 @@ cd backend && npm run eval -- --limit 5 --verbose
 
 ## 7. Recommended order from here
 
+0. **Merge two open branches** — `feat/duplicate-detection` (`2d42a50`) and
+   `feat/product-variant-expand` (`105ea94`). Both are green and additive.
+   They touch `schema.prisma` in different places, so whichever merges second
+   may need a trivial conflict resolution — keep **both** models.
 1. **Get `GEMINI_API_KEY`** — nothing AI-related is measurable without it
 2. **Set up Resend** — owner emails currently never arrive
 3. **Embedding backfill** (dev, after #1), then run `npm run eval` for a first
    real accuracy number
-4. **Finish Phase 2** — 2.4 duplicate detection, then 2.5/2.6 (~1.5 days)
-5. **Phase 1 `ProductVariant`** — before going off mock (~4 days)
+4. **Finish Phase 2** — 2.5/2.6 (~1 day)
+5. **Phase 1 PR2–PR4** — before going off mock (~3 days)
 6. **Collect 50 eval messages**, then Phase 3
