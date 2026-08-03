@@ -21,6 +21,7 @@ import { AiMetricsService } from './ai-metrics.service';
 import { AiMetricsController } from './ai-metrics.controller';
 import { UnfulfilledDemandService } from './unfulfilled-demand.service';
 import { DuplicateDetectorService } from './duplicate-detector.service';
+import { SoftAlternativesService } from './soft-alternatives.service';
 
 @Module({
   imports: [ProductVariantModule],
@@ -112,6 +113,7 @@ import { DuplicateDetectorService } from './duplicate-detector.service';
     AiMetricsService,
     UnfulfilledDemandService,
     DuplicateDetectorService,
+    SoftAlternativesService,
   ],
   exports: [AiEngineService, ProductRetrieverService, ConflictResolverService],
 })

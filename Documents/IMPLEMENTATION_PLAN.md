@@ -14,7 +14,7 @@
 | **Pre-work** — audit remediation | ✅ Complete · merged · live |
 | **Phase 0** — Instrument & measure | ✅ Complete · merged · live |
 | **Phase 1** — `ProductVariant` | 🟡 PR1 merged · PR2+PR3 built · PR4 remains |
-| **Phase 2** — Stop losing orders | 🟡 4 of 6 merged · 2.5 / 2.6 remain |
+| **Phase 2** — Stop losing orders | ✅ 6 of 6 · 2.5 / 2.6 built |
 | **Phase 3** — Sinhala / Singlish | 🟡 Query normalisation merged · tuning blocked on eval dataset |
 | **Phase 4** — Voice & images | ⬜ Not started |
 | **Phase 5** — Scale out | ⬜ Trigger-based — no trigger fired yet |
@@ -210,10 +210,21 @@ Measure with the eval harness before and after.
       "2 shirts" twice creates **two real WooCommerce orders**. Now checks
       customer + product + qty within N minutes → flags `POTENTIAL_DUPLICATE`
       for review rather than auto-blocking.
-- [ ] **2.5 Soft alternatives** — acknowledge the miss honestly, then offer
+- [x] **2.5 Soft alternatives** — acknowledge the miss honestly, then offer
       2–3 close matches. Not a catalogue dump.
-- [ ] **2.6 Friendly tone prompts** — warm, customer's language, no robotic
+      **Built** — branch `feat/soft-alternatives`, `SOFT_ALTERNATIVES_ENABLED`
+      (default on). Reuses the products retrieval already fetched, so no extra
+      query and no extra model call — they are the closest catalogue items by
+      definition. **Never offers a sold-out item**: suggesting one is the same
+      false promise the product exists to prevent. Returns null when there is
+      nothing honest to offer, and the caller keeps its existing path.
+- [x] **2.6 Friendly tone prompts** — warm, customer's language, no robotic
       phrasing. **Never claim to be human** — the handoff has to stay honest.
+      **Mostly already satisfied.** The handoff and follow-up copy were
+      already warm and honest, so this added guard tests rather than new
+      wording: the handoff message must not claim to be a person, must say a
+      person is coming, and must not read like an error. Kept as tests so a
+      future rewrite cannot quietly break it.
 
 ### ⬜ Phase 3 — Sinhala / Singlish (blocked)
 

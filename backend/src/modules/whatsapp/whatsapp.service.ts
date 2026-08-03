@@ -339,6 +339,27 @@ export class WhatsAppService {
       // check whether it has already asked as many times as it is allowed to —
       // without this the conversation loops until the customer gives up, which
       // is a silently lost sale.
+      // A close in-stock alternative beats asking "what size?" about something
+      // the shop does not stock at all (Phase 2 item 2.5). Checked before the
+      // escalation counter so a useful answer is not skipped in favour of
+      // waiting for a person.
+      if (result.softAlternatives) {
+        await this.whatsappAdapter.sendTextMessage(
+          phone,
+          result.softAlternatives,
+        );
+        await this.conversationsService.addBotReply(
+          tenantId,
+          phone,
+          result.softAlternatives,
+        );
+
+        this.logger.log(
+          `[${tenantId}] Offered close alternatives to ${phone} instead of a dead end`,
+        );
+        return;
+      }
+
       const escalate = await this.humanHandoff.shouldEscalate(tenantId, phone);
 
       if (escalate) {

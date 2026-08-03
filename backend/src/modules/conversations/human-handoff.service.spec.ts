@@ -242,4 +242,29 @@ describe('HumanHandoffService', () => {
       expect(msg).not.toMatch(/\+?\d{7,}/);
     });
   });
+
+  describe('customer message tone (Phase 2 item 2.6)', () => {
+    it('never claims to be a person', () => {
+      // The handoff only means anything if the bot never pretended to be
+      // human in the first place. This is a guard, not a fix — the copy is
+      // already honest, and this keeps it that way.
+      const message = service.buildCustomerMessage().toLowerCase();
+
+      expect(message).not.toMatch(
+        /\bi am (a )?(human|person|real)\b|\bthis is [a-z]+ speaking\b/,
+      );
+    });
+
+    it('tells the customer a person is coming, so the wait is explained', () => {
+      const message = service.buildCustomerMessage().toLowerCase();
+
+      expect(message).toMatch(/team|someone|person/);
+    });
+
+    it('reads warmly rather than like an error', () => {
+      const message = service.buildCustomerMessage();
+
+      expect(message).not.toMatch(/error|failed|unable to process|invalid/i);
+    });
+  });
 });
