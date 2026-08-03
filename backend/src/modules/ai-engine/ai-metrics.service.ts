@@ -40,6 +40,12 @@ export interface AiMetrics {
     rejected: number;
     pending: number;
   };
+  /**
+   * One entry per day in the window, gaps filled with zeros. A trend line
+   * with missing days is unreadable — a quiet Sunday must render as zero
+   * rather than vanish and make Monday look adjacent to Saturday.
+   */
+  daily: { date: string; prepared: number; corrected: number }[];
   /** Surfaces whether the pipeline is running on real Gemini or the mock. */
   models: { modelUsed: string; runs: number }[];
   tokens: { total: number };
@@ -82,15 +88,23 @@ export class AiMetricsService {
     const to = new Date();
     const from = new Date(to.getTime() - windowDays * 24 * 60 * 60 * 1000);
 
-    const [pipeline, confidence, accuracy, models, tokens, recentFailures] =
-      await Promise.all([
-        this.pipelineHealth(tenantId, from),
-        this.confidenceDistribution(tenantId, from),
-        this.extractionAccuracy(tenantId, from),
-        this.modelMix(tenantId, from),
-        this.tokenUsage(tenantId, from),
-        this.recentFailures(tenantId, from),
-      ]);
+    const [
+      pipeline,
+      confidence,
+      accuracy,
+      daily,
+      models,
+      tokens,
+      recentFailures,
+    ] = await Promise.all([
+      this.pipelineHealth(tenantId, from),
+      this.confidenceDistribution(tenantId, from),
+      this.extractionAccuracy(tenantId, from),
+      this.dailyActivity(tenantId, from, windowDays),
+      this.modelMix(tenantId, from),
+      this.tokenUsage(tenantId, from),
+      this.recentFailures(tenantId, from),
+    ]);
 
     return {
       period: {
@@ -101,6 +115,7 @@ export class AiMetricsService {
       pipeline,
       confidence,
       accuracy,
+      daily,
       models,
       tokens,
       recentFailures,
@@ -271,6 +286,91 @@ export class AiMetricsService {
         },
       ],
     };
+  }
+
+  // ── Daily activity ─────────────────────────────────────────────
+
+  /**
+   * Drafts prepared per day, and how many of those the owner had to edit.
+   *
+   * This is the only view that answers "is it getting better?", which a single
+   * period figure cannot. Grouped in SQL rather than in JavaScript because the
+   * window can be 90 days and the row count grows with traffic.
+   */
+  private async dailyActivity(
+    tenantId: string,
+    from: Date,
+    windowDays: number,
+  ): Promise<{ date: string; prepared: number; corrected: number }[]> {
+    try {
+      const rows = await this.prisma.$queryRaw<
+        { day: Date; prepared: bigint; corrected: bigint }[]
+      >`
+        SELECT date_trunc('day', "createdAt") AS day,
+               COUNT(*) AS prepared,
+               COUNT(*) FILTER (WHERE "humanCorrections" IS NOT NULL) AS corrected
+        FROM "ai_draft_orders"
+        WHERE "tenantId" = ${tenantId}::uuid
+          AND "createdAt" >= ${from}
+        GROUP BY 1
+        ORDER BY 1
+      `;
+
+      return AiMetricsService.buildDailySeries(
+        from,
+        windowDays,
+        (rows ?? [])
+          // Defensive: a shape change here would otherwise throw inside
+          // toISOString and take the whole dashboard down over one chart.
+          .filter((r) => r?.day instanceof Date)
+          .map((r) => ({
+            day: r.day.toISOString().slice(0, 10),
+            prepared: Number(r.prepared ?? 0),
+            corrected: Number(r.corrected ?? 0),
+          })),
+      );
+    } catch (error: unknown) {
+      // Degrade to a flat line rather than failing the page, matching how the
+      // p95 query already behaves. A missing chart is a far smaller problem
+      // than a dashboard that will not load.
+      this.logger.error(
+        `[${tenantId}] Daily activity query failed: ${
+          error instanceof Error ? error.message : 'unknown'
+        }. Returning an empty series.`,
+      );
+
+      return AiMetricsService.buildDailySeries(from, windowDays, []);
+    }
+  }
+
+  /**
+   * Expand grouped rows into one entry per day, zero-filling the gaps.
+   *
+   * Static and pure so the zero-filling can be tested without a database —
+   * the off-by-one risks here (window boundaries, ordering) are exactly the
+   * kind that survive a live smoke test and break a chart weeks later.
+   */
+  static buildDailySeries(
+    from: Date,
+    windowDays: number,
+    rows: { day: string; prepared: number; corrected: number }[],
+  ): { date: string; prepared: number; corrected: number }[] {
+    const byDay = new Map(rows.map((r) => [r.day, r]));
+    const out: { date: string; prepared: number; corrected: number }[] = [];
+
+    for (let i = 0; i < windowDays; i++) {
+      const d = new Date(from.getTime() + i * 24 * 60 * 60 * 1000);
+      const key = d.toISOString().slice(0, 10);
+      const hit = byDay.get(key);
+
+      out.push({
+        date: key,
+        prepared: hit?.prepared ?? 0,
+        corrected: hit?.corrected ?? 0,
+      });
+    }
+
+    return out;
   }
 
   // ── Extraction accuracy ────────────────────────────────────────

@@ -9,6 +9,10 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  AreaChart,
+  Area,
+  CartesianGrid,
+  LabelList,
 } from 'recharts';
 import {
   AlertCircle,
@@ -55,6 +59,7 @@ interface AiMetrics {
     rejected: number;
     pending: number;
   };
+  daily: { date: string; prepared: number; corrected: number }[];
   models: { modelUsed: string; runs: number }[];
   recentFailures: { stage: string; errorMessage: string | null; at: string }[];
 }
@@ -81,27 +86,36 @@ interface DemandSummary {
  */
 const MINUTES_SAVED_PER_ORDER = 2;
 
-/** Good, caution, attention. Not a rainbow. */
-const OUTCOME_COLORS = ['#37b699', '#d6a24a', '#df6a52'];
-
 /**
- * The confidence bands in the owner's language. The thresholds are a real
- * engineering decision; the owner only needs to know what HAPPENED.
+ * Outcomes in the owner's language, keyed by POSITION rather than by the
+ * band's range string.
+ *
+ * The previous version matched on strings like '0.80 - 0.95'. The API emits
+ * '0.8 – 0.95' — an en dash, and no trailing zero — so two of the three keys
+ * silently missed and the page fell back to raw internal labels
+ * ("Manual confirmation required"). Worse, the colours were applied by the
+ * same index without accounting for order: the API returns bands worst-first,
+ * so the LOWEST confidence band was painted green and "ready to send" red.
+ *
+ * The API contract is the order, not the wording, so that is what this keys on.
  */
-const OUTCOMES: Record<string, { title: string; meaning: string }> = {
-  '>= 0.95': {
-    title: 'Ready to send',
-    meaning: 'Confident enough to prepare the order for you',
-  },
-  '0.80 - 0.95': {
-    title: 'Needed your check',
-    meaning: 'Mostly right, worth a glance before you approve',
-  },
-  '< 0.80': {
+const OUTCOMES = [
+  {
     title: 'Asked the customer',
     meaning: 'Something was unclear, so it asked rather than guessed',
+    color: '#df6a52',
   },
-};
+  {
+    title: 'Needed your check',
+    meaning: 'Mostly right, worth a glance before you approve',
+    color: '#d6a24a',
+  },
+  {
+    title: 'Ready to send',
+    meaning: 'Confident enough to prepare the order for you',
+    color: '#37b699',
+  },
+] as const;
 
 /**
  * Provider errors are written for whoever runs the service. "Rate limit
@@ -219,12 +233,16 @@ export default function AiPerformancePage() {
   const savedLabel =
     minutesSaved >= 60 ? `${(minutesSaved / 60).toFixed(1)} hrs` : `${minutesSaved} min`;
 
-  const outcomes = confidence.bands.map((b, i) => ({
-    name: OUTCOMES[b.range]?.title ?? b.label,
-    meaning: OUTCOMES[b.range]?.meaning ?? '',
-    count: b.count,
-    fill: OUTCOME_COLORS[i] ?? OUTCOME_COLORS[0],
-  }));
+  // Reversed so the best outcome reads first — an owner wants "how much went
+  // smoothly" before "how much needed me".
+  const outcomes = confidence.bands
+    .map((b, i) => ({
+      name: OUTCOMES[i]?.title ?? b.label,
+      meaning: OUTCOMES[i]?.meaning ?? '',
+      count: b.count,
+      fill: OUTCOMES[i]?.color ?? '#8c8577',
+    }))
+    .reverse();
   const totalOutcomes = outcomes.reduce((s, o) => s + o.count, 0);
 
   // Told plainly, rather than handing over a percentage to interpret.
@@ -236,6 +254,16 @@ export default function AiPerformancePage() {
     .filter((m) => m.modelUsed.startsWith('mock'))
     .reduce((sum, m) => sum + m.runs, 0);
   const inDemoMode = pipeline.totalRuns > 0 && mockRuns / pipeline.totalRuns > 0.1;
+
+  const trend = (data.daily ?? []).map((d) => ({
+    // "4 Aug" reads faster than an ISO date on a crowded axis.
+    label: new Date(`${d.date}T00:00:00`).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+    }),
+    prepared: d.prepared,
+  }));
+  const trendTotal = trend.reduce((sum, d) => sum + d.prepared, 0);
 
   const demandChart = (demand?.top ?? []).slice(0, 6).map((r) => ({
     name: r.query.length > 24 ? `${r.query.slice(0, 24)}…` : r.query,
@@ -343,12 +371,90 @@ export default function AiPerformancePage() {
         />
       </div>
 
+      {/* ── Trend ──────────────────────────────────────────────── */}
+      <div className="card">
+        <div className="between sec-head">
+          <div>
+            <h2 className="sec-title">Orders prepared each day</h2>
+            <p className="t-muted sec-sub">
+              A single total hides whether things are improving. This does not.
+            </p>
+          </div>
+          <span className="trend-total">{trendTotal} in {days} days</span>
+        </div>
+
+        {trendTotal === 0 ? (
+          <p className="t-muted empty">
+            Nothing yet. Once customers start messaging, their orders appear here
+            day by day.
+          </p>
+        ) : (
+          <div className="chart" aria-hidden="true">
+            <ResponsiveContainer width="100%" height={190}>
+              <AreaChart data={trend} margin={{ top: 6, right: 8, bottom: 0, left: -22 }}>
+                <defs>
+                  <linearGradient id="preparedFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.22} />
+                    <stop offset="100%" stopColor="var(--brand)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  vertical={false}
+                  stroke="var(--line)"
+                  strokeDasharray="3 3"
+                />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  interval="preserveStartEnd"
+                  minTickGap={22}
+                  tick={{ fill: 'var(--ink-3)', fontSize: 11 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tickLine={false}
+                  axisLine={false}
+                  width={40}
+                  tick={{ fill: 'var(--ink-3)', fontSize: 11 }}
+                />
+                <Tooltip
+                  cursor={{ stroke: 'var(--line-strong)' }}
+                  contentStyle={{
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 10,
+                    fontSize: '0.8125rem',
+                  }}
+                  formatter={(v) => [`${String(v)} orders`, '']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="prepared"
+                  stroke="var(--brand)"
+                  strokeWidth={2}
+                  fill="url(#preparedFill)"
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
       {/* ── Outcomes ───────────────────────────────────────────── */}
       <div className="card">
-        <h2 className="sec-title">What happened to each order</h2>
+        <div className="between sec-head">
+          <h2 className="sec-title">What happened to each request</h2>
+          {totalOutcomes > 0 && (
+            <span className="trend-total">{totalOutcomes} requests</span>
+          )}
+        </div>
         <p className="t-muted sec-sub">
-          The assistant only prepares an order it is sure about. When it is not
-          sure, it asks you — or asks the customer — instead of guessing.
+          Every customer message the assistant scored. It only turns one into
+          an order when it is sure — otherwise it asks you, or asks the
+          customer, instead of guessing.
         </p>
 
         {totalOutcomes === 0 ? (
@@ -382,7 +488,15 @@ export default function AiPerformancePage() {
                   <div className="legend-copy">
                     <div className="legend-head">
                       <strong>{o.name}</strong>
-                      <span className="legend-count">{o.count}</span>
+                      <span className="legend-count">
+                        {o.count}
+                        {totalOutcomes > 0 && (
+                          <span className="legend-share">
+                            {' '}
+                            ({Math.round((o.count / totalOutcomes) * 100)}%)
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <p className="t-muted legend-meaning">{o.meaning}</p>
                   </div>
@@ -395,10 +509,17 @@ export default function AiPerformancePage() {
 
       {/* ── Missed demand ──────────────────────────────────────── */}
       <div className="card">
-        <h2 className="sec-title">
-          <Search size={15} aria-hidden="true" />
-          What customers asked for that you don&apos;t sell
-        </h2>
+        <div className="between sec-head">
+          <h2 className="sec-title">
+            <Search size={15} aria-hidden="true" />
+            What customers asked for that you don&apos;t sell
+          </h2>
+          {(demand?.totalRequests ?? 0) > 0 && (
+            <span className="trend-total">
+              {demand?.totalRequests} missed
+            </span>
+          )}
+        </div>
         <p className="t-muted sec-sub">
           Ranked by how many different people asked. Five people asking once
           each is a stronger signal than one person asking five times.
@@ -436,7 +557,12 @@ export default function AiPerformancePage() {
                     }}
                     formatter={(v) => [`${String(v)} asked`, '']}
                   />
-                  <Bar dataKey="customers" radius={[0, 6, 6, 0]} barSize={16}>
+                  <Bar dataKey="customers" radius={[0, 6, 6, 0]} barSize={18}>
+                    <LabelList
+                      dataKey="customers"
+                      position="right"
+                      style={{ fill: 'var(--ink-2)', fontSize: 12, fontWeight: 600 }}
+                    />
                     {demandChart.map((_, i) => (
                       <Cell key={i} fill="var(--brand)" />
                     ))}
@@ -616,10 +742,33 @@ export default function AiPerformancePage() {
           font-weight: 600;
           color: var(--ink-2);
         }
+        .legend-share {
+          font-weight: 500;
+          color: var(--ink-3);
+        }
         .legend-meaning {
           font-size: 0.75rem;
           line-height: 1.45;
           margin-top: 2px;
+        }
+
+        .sec-head {
+          gap: 14px;
+          align-items: flex-start;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+        }
+        .sec-head .sec-sub {
+          margin-bottom: 0;
+        }
+        .trend-total {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: var(--ink-2);
+          background: var(--surface-3);
+          padding: 5px 10px;
+          border-radius: 999px;
+          white-space: nowrap;
         }
 
         .chart {

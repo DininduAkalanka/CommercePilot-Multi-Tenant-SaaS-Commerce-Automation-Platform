@@ -237,4 +237,57 @@ describe('AiMetricsService', () => {
       }
     });
   });
+
+  describe('daily activity', () => {
+    it('returns one entry per day in the window, including days with nothing', () => {
+      // A trend line with gaps is unreadable — a quiet Sunday must render as
+      // zero, not vanish and make Monday look adjacent to Saturday.
+      const series = AiMetricsService.buildDailySeries(
+        new Date('2026-08-01T00:00:00Z'),
+        3,
+        [
+          { day: '2026-08-01', prepared: 4, corrected: 1 },
+          { day: '2026-08-03', prepared: 2, corrected: 0 },
+        ],
+      );
+
+      expect(series).toHaveLength(3);
+      expect(series.map((d) => d.date)).toEqual([
+        '2026-08-01',
+        '2026-08-02',
+        '2026-08-03',
+      ]);
+      expect(series[1]).toEqual({
+        date: '2026-08-02',
+        prepared: 0,
+        corrected: 0,
+      });
+    });
+
+    it('keeps the days in chronological order', () => {
+      const series = AiMetricsService.buildDailySeries(
+        new Date('2026-08-01T00:00:00Z'),
+        3,
+        [{ day: '2026-08-03', prepared: 1, corrected: 0 }],
+      );
+
+      const dates = series.map((d) => d.date);
+      expect([...dates].sort()).toEqual(dates);
+    });
+
+    it('ignores rows outside the window rather than stretching the chart', () => {
+      const series = AiMetricsService.buildDailySeries(
+        new Date('2026-08-01T00:00:00Z'),
+        2,
+        [
+          { day: '2026-07-20', prepared: 99, corrected: 99 },
+          { day: '2026-08-02', prepared: 3, corrected: 1 },
+        ],
+      );
+
+      expect(series).toHaveLength(2);
+      expect(series.some((d) => d.prepared === 99)).toBe(false);
+      expect(series[1].prepared).toBe(3);
+    });
+  });
 });
