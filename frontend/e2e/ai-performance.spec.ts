@@ -19,11 +19,14 @@ test.describe('AI Performance', () => {
     await expect(page.getByRole('heading', { name: 'Your assistant' })).toBeVisible();
 
     // A tenant with no traffic must render zeros, not crash or divide by zero.
-    await expect(page.getByText('Orders prepared')).toBeVisible();
-    await expect(page.getByText('Right first time')).toBeVisible();
     await expect(
-      page.getByText('No orders in this period yet.', { exact: false }),
+      page.getByText('Orders prepared', { exact: true }),
     ).toBeVisible();
+    await expect(page.getByText('Right first time')).toBeVisible();
+    // The designed empty state, not a bare line of grey text.
+    await expect(page.getByText('Nothing scored yet')).toBeVisible();
+    // Exact: the stat hint also contains "No orders yet in this period".
+    await expect(page.getByText('No orders yet', { exact: true })).toBeVisible();
   });
 
   test('reflects real pipeline activity after a customer message', async ({ page }) => {
@@ -44,7 +47,9 @@ test.describe('AI Performance', () => {
     await expect(page.getByRole('heading', { name: 'Your assistant' })).toBeVisible();
 
     // Processing is async via BullMQ, so allow the pipeline time to land rows.
-    await expect(page.getByText('Orders prepared')).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText('Orders prepared', { exact: true }),
+    ).toBeVisible({ timeout: 15_000 });
 
     // Canned answers must be called out rather than letting practice figures
     // be mistaken for real performance — in the owner's words, not ours.
