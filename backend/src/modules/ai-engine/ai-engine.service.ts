@@ -5,6 +5,7 @@ import { AI_ADAPTER } from './adapters/ai-adapter.interface';
 import type { AiAdapter } from './adapters/ai-adapter.interface';
 import { IntentDetectorService } from './pipeline/intent-detector.service';
 import { ProductRetrieverService } from './pipeline/product-retriever.service';
+import { QueryNormalizerService } from './pipeline/query-normalizer.service';
 import { EntityExtractorService } from './pipeline/entity-extractor.service';
 import { ConfidenceScorerService } from './pipeline/confidence-scorer.service';
 import {
@@ -72,6 +73,7 @@ export class AiEngineService {
     @Inject(AI_ADAPTER) private readonly ai: AiAdapter,
     private readonly intentDetector: IntentDetectorService,
     private readonly productRetriever: ProductRetrieverService,
+    private readonly queryNormalizer: QueryNormalizerService,
     private readonly entityExtractor: EntityExtractorService,
     private readonly confidenceScorer: ConfidenceScorerService,
     private readonly unfulfilledDemand: UnfulfilledDemandService,
@@ -115,10 +117,16 @@ export class AiEngineService {
     }
 
     // ── Stage 2: Product Retrieval (RAG) ─────────────────────────
+    // Retrieval only, deliberately. Extraction (Stage 3) still receives the
+    // ORIGINAL message: normalisation is lossy by design — it drops quantity,
+    // politeness and context to produce a short search phrase — and extracting
+    // the order from that would throw away exactly the detail the draft needs.
+    const searchQuery = await this.queryNormalizer.normalize(input.messageText);
+
     const { products, catalogContext } = await this.productRetriever.retrieve(
       input.tenantId,
       input.messageId,
-      input.messageText,
+      searchQuery,
       input.referralHint,
     );
 

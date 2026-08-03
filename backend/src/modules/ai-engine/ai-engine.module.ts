@@ -11,6 +11,7 @@ import {
   EmbeddingProvider,
 } from './adapters/embedding-provider.interface';
 import { IntentDetectorService } from './pipeline/intent-detector.service';
+import { QueryNormalizerService } from './pipeline/query-normalizer.service';
 import { ProductRetrieverService } from './pipeline/product-retriever.service';
 import { EntityExtractorService } from './pipeline/entity-extractor.service';
 import { ConfidenceScorerService } from './pipeline/confidence-scorer.service';
@@ -101,6 +102,7 @@ import { DuplicateDetectorService } from './duplicate-detector.service';
       },
     },
     IntentDetectorService,
+    QueryNormalizerService,
     ProductRetrieverService,
     EntityExtractorService,
     ConfidenceScorerService,
