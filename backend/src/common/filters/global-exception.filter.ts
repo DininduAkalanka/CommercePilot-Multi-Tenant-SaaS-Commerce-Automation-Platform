@@ -49,13 +49,26 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         }
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
+      // Deliberately NOT surfaced to the client. An unexpected error's message
+      // is written for whoever operates the service, and ORM errors in
+      // particular carry the query shape, the source file path and the line
+      // number — a QA pass found a malformed id returning the full Prisma
+      // invocation plus the server's directory layout to any caller.
+      //
+      // HttpExceptions above are different: those messages are authored for
+      // the caller ("Insufficient stock for Blue Shirt") and stay intact.
+      // The real error is logged below, so nothing is lost to us.
+      message = 'Internal server error';
     }
 
     // Log at appropriate level
     if (status >= 500) {
+      // Log what actually happened, not the sanitised text sent to the client.
+      const detail =
+        exception instanceof Error ? exception.message : String(exception);
+
       this.logger.error(
-        `[${correlationId}] ${request.method} ${request.url} → ${status}: ${message}`,
+        `[${correlationId}] ${request.method} ${request.url} → ${status}: ${detail}`,
         exception instanceof Error ? exception.stack : undefined,
       );
 

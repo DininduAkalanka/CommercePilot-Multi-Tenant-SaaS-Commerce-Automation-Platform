@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   ParseIntPipe,
+  ParseUUIDPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -68,7 +69,10 @@ export class ProductsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific product by ID' })
-  async getProduct(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+  async getProduct(
+    @CurrentTenant() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     const product = await this.productsService.getProduct(tenantId, id);
     return { success: true, data: product };
   }
@@ -78,7 +82,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Update a product' })
   async updateProduct(
     @CurrentTenant() tenantId: string,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProductDto,
   ) {
     const product = await this.productsService.updateProduct(tenantId, id, dto);
@@ -94,7 +98,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Soft delete a product' })
   async deleteProduct(
     @CurrentTenant() tenantId: string,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     const result = await this.productsService.deleteProduct(tenantId, id);
     return result;

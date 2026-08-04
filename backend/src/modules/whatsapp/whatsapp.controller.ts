@@ -51,7 +51,13 @@ export class WhatsAppController {
    * Meta calls this when you register the webhook URL.
    */
   @Get('webhook')
-  @SkipThrottle()
+  // @SkipThrottle() with no argument defaults to { default: true } in
+  // @nestjs/throttler 6.x — it skips a throttler NAMED "default". This app's
+  // throttlers are named "short" and "long" (app.module.ts), so the bare form
+  // skipped nothing and these routes were rate limited at 10 req/s after all.
+  // Named explicitly so the exemption actually applies.
+  // Meta delivers webhooks in bursts; throttling them drops real customer messages.
+  @SkipThrottle({ short: true, long: true })
   @ApiExcludeEndpoint()
   verifyWebhook(
     @Query('hub.mode') mode: string,
@@ -75,7 +81,7 @@ export class WhatsAppController {
    * Always returns 200 immediately — processing is async via BullMQ.
    */
   @Post('webhook')
-  @SkipThrottle()
+  @SkipThrottle({ short: true, long: true })
   @HttpCode(HttpStatus.OK)
   @ApiExcludeEndpoint()
   async receiveMessage(

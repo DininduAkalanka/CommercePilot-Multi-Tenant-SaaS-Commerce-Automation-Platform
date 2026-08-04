@@ -33,7 +33,13 @@ interface ReadinessStatus {
 @Controller('health')
 // The platform health check and any uptime monitor poll these continuously;
 // throttling them would make the service look unhealthy and trigger restarts.
-@SkipThrottle()
+// @SkipThrottle() with no argument defaults to { default: true } in
+// @nestjs/throttler 6.x — it skips a throttler NAMED "default". This app's
+// throttlers are named "short" and "long" (app.module.ts), so the bare form
+// skipped nothing and these routes were rate limited at 10 req/s after all.
+// Named explicitly so the exemption actually applies.
+// Health checks returning 429 make the platform judge the service unhealthy and restart it.
+@SkipThrottle({ short: true, long: true })
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 

@@ -4,6 +4,7 @@ import {
   Patch,
   Body,
   Param,
+  ParseUUIDPipe,
   Query,
   UseGuards,
   HttpCode,
@@ -106,7 +107,10 @@ export class OrdersController {
   /** Get a specific draft with AI processing logs */
   @Get('drafts/:id')
   @ApiOperation({ summary: 'Get a specific draft with AI processing logs' })
-  async getDraft(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+  async getDraft(
+    @CurrentTenant() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     const result = await this.ordersService.getDraftById(tenantId, id);
     return { success: true, data: result };
   }
@@ -120,7 +124,7 @@ export class OrdersController {
   async approveDraft(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: JwtPayload,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ApproveOrderDto,
   ) {
     const order = await this.ordersService.approveDraft(
@@ -141,7 +145,7 @@ export class OrdersController {
   async rejectDraft(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: JwtPayload,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RejectOrderDto,
   ) {
     const result = await this.ordersService.rejectDraft(

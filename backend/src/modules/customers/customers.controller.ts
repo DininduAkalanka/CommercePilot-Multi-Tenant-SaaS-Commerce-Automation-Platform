@@ -5,6 +5,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  ParseUUIDPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
 import { CustomersService } from './customers.service';
@@ -72,7 +73,7 @@ export class CustomersController {
   @ApiResponse({ status: 404, description: 'Customer not found' })
   async findOne(
     @CurrentUser('tenantId') tenantId: string,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     const data = await this.customersService.findOne(tenantId, id);
     return { success: true, data };
@@ -89,7 +90,7 @@ export class CustomersController {
   @ApiResponse({ status: 404, description: 'Customer not found' })
   async findCustomerOrders(
     @CurrentUser('tenantId') tenantId: string,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     const data = await this.customersService.findCustomerOrders(tenantId, id);
     return { success: true, data };
@@ -106,7 +107,7 @@ export class CustomersController {
   @ApiResponse({ status: 404, description: 'Customer not found' })
   async findCustomerMessages(
     @CurrentUser('tenantId') tenantId: string,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
     const data = await this.customersService.findCustomerMessages(
