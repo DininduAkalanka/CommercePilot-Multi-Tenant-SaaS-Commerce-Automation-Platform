@@ -2,7 +2,7 @@
 
 **The AI Automation Layer for Existing E-commerce Businesses**
 
-CommercePilot turns WhatsApp order chaos into a governed, auditable pipeline — without replacing the store a business already runs. It reads incoming WhatsApp messages, uses AI (Gemini) to understand intent and extract structured orders against a tenant's real product catalogue (RAG, never invented products), scores its own confidence, and hands every order to the business owner for a final human decision before anything is written back to WooCommerce.
+CommercePilot turns WhatsApp order chaos into a governed, auditable pipeline — without replacing the store a business already runs. It reads incoming WhatsApp messages, uses AI to understand intent and extract structured orders against a tenant's real product catalogue (RAG, never invented products), scores its own confidence, and hands every order to the business owner for a final human decision before anything is written back to WooCommerce.
 
 > AI recommends. Humans decide. Every action is audited.
 
@@ -12,6 +12,7 @@ CommercePilot turns WhatsApp order chaos into a governed, auditable pipeline —
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Prisma](https://img.shields.io/badge/ORM-Prisma-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![Redis](https://img.shields.io/badge/Queue-BullMQ%20%2B%20Redis-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![Tests](https://img.shields.io/badge/Tests-376%20unit%20%C2%B7%2022%20E2E-success)](#testing)
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey)](#license)
 
 ---
@@ -23,6 +24,7 @@ CommercePilot turns WhatsApp order chaos into a governed, auditable pipeline —
 - [Core Modules](#core-modules)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
+- [Language Support](#language-support)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [API Reference](#api-reference)
@@ -31,7 +33,7 @@ CommercePilot turns WhatsApp order chaos into a governed, auditable pipeline —
 - [Business Rules & AI Governance](#business-rules--ai-governance)
 - [Project Status](#project-status)
 - [Roadmap](#roadmap)
-- [Internal Documentation](#internal-documentation)
+- [Documentation](#documentation)
 - [License](#license)
 
 ---
@@ -90,8 +92,16 @@ Every stage of the AI pipeline (intent → RAG → extraction → confidence) is
 | **Users** | Owner-operated team management with privilege-escalation and self-lockout guards | ✅ Shipped |
 | **Admin** | Cross-tenant platform operations for `SUPER_ADMIN` (tenant list, stats, suspend/activate) | ✅ Shipped |
 | **Tenant Settings** | Encrypted integration credentials (AES-256-GCM), per-tenant configuration | ✅ Shipped |
+| **Product Variants** | Per-combination stock (size × colour), canonical attribute keys, dashboard management | ✅ Shipped |
+| **Conversations** | Multi-turn state, human handoff after repeated failed clarifications | ✅ Shipped |
+| **Query Normalisation** | Sinhala/Tamil messages translated to English before retrieval | ✅ Shipped |
+| **Unfulfilled Demand** | Every unmatched request logged and ranked by distinct customers | ✅ Shipped |
+| **Duplicate Detection** | Flags likely repeat orders for review rather than shipping twice | ✅ Shipped |
+| **AI Metrics** | Per-stage pipeline health, confidence distribution, correction rate | ✅ Shipped |
 | AI Customer Support | Autonomous FAQ / support handling | 🔜 Future |
 | Abandoned Cart Recovery | Automated re-engagement | 🔜 Future |
+| Voice notes | Whisper transcription — model available on the current key, pipeline work outstanding | 🔜 Future |
+| Billing & plan enforcement | `TenantPlan` is modelled but never enforced | 🔜 Future |
 | Shopify / Instagram / Messenger | Additional channel & platform integrations | 🔜 Future |
 
 ## Tech Stack
@@ -102,9 +112,13 @@ Every stage of the AI pipeline (intent → RAG → extraction → confidence) is
 | **Backend** | NestJS 11, TypeScript (strict), class-validator/class-transformer, Passport-JWT, Helmet, Swagger/OpenAPI |
 | **Database** | PostgreSQL 16 + `pgvector` (for AI product embeddings), Prisma ORM, migration-based schema |
 | **Queue / Cache** | Redis 7, BullMQ (AI processing, retries, scheduled jobs) |
-| **AI** | Google Gemini (`gemini-2.5-flash`), `text-embedding-004` for RAG — mock extractor fallback with no API key |
+| **AI** | Provider-agnostic behind `AiAdapter` — Groq (`llama-3.3-70b-versatile`) in use, Gemini selectable; stage-aware mock with no key |
+| **Embeddings** | Separate `EmbeddingProvider` interface — Jina `jina-embeddings-v3` at 768 dims, or `none` (text search) |
 | **Integrations** | WooCommerce REST API, WhatsApp Cloud API (Meta Graph), SMTP email (MailHog in dev / Resend in prod) |
 | **Infra (local)** | Docker Compose — Postgres, Redis, MailHog |
+| **Hosting** | Render (API, Docker) · Vercel (dashboard) · Neon (Postgres) · Upstash (Redis) |
+
+Full detail in [`TECHNOLOGY.md`](TECHNOLOGY.md) — every dependency, why it was chosen, and the version-specific traps found along the way.
 
 ## Architecture
 
@@ -129,6 +143,32 @@ Infrastructure (Prisma repositories, external API adapters)
 - Nothing is hard-deleted from business tables — soft delete via `deleted_at` only.
 - All primary keys are UUIDv4, generated in the backend, never in the database.
 - The audit log is append-only. It is never updated or deleted.
+
+[`ARCHITECTURE.md`](ARCHITECTURE.md) covers the request lifecycle, the six-stage AI pipeline, the provider abstraction, the expand/contract variant rollout, and verified failure behaviour.
+
+## Language Support
+
+Customers write in English, Sinhala, and Singlish (Sinhala in Latin script).
+Each behaves differently, and the system handles them differently:
+
+| Input | Handling |
+|---|---|
+| **English** | Retrieval and extraction directly. |
+| **Singlish** — `mata blue shirt ekak one` | Passed through unchanged. Measured at 0.628 retrieval similarity with a 0.322 margin — it already works, and rewriting it would risk a downgrade. |
+| **Sinhala** — `මට නිල් ෂර්ට් එකක් ඕන` | Translated to a short English search phrase **before retrieval only**. |
+
+Sinhala needed the extra step for a concrete reason: text search tokenises on
+`[^a-z0-9]`, so Sinhala script produced **zero** search terms and matched
+nothing. Embedding the raw script did not help either — measured against real
+catalogue text, Sinhala queries ranked the same unrelated product first every
+time, with margins of 0.005–0.035.
+
+Normalising first fixed both paths: vector margin 0.010 → 0.421, text terms
+0 → 2.
+
+**Extraction still receives the original message.** Normalisation deliberately
+discards quantity, size and politeness; a draft built from the normalised text
+would silently lose the "2" the customer asked for.
 
 ## Project Structure
 
@@ -201,10 +241,24 @@ Fill in at minimum:
 | `DATABASE_URL` | PostgreSQL connection string (Docker default: port `5433` on host) |
 | `JWT_SECRET` | Long random string — signs access/refresh tokens |
 | `ENCRYPTION_KEY` | 64 hex chars (`openssl rand -hex 32`) — encrypts stored integration credentials (AES-256-GCM) |
-| `GEMINI_API_KEY` | Optional — omit to run the AI pipeline in mock mode |
-| `WHATSAPP_PROVIDER` / `WOOCOMMERCE_PROVIDER` | Leave as `mock` for local dev; the built-in simulator and mock adapter need no external accounts |
+| `AI_PROVIDER` | `groq` (default) or `gemini` |
+| `GROQ_API_KEY` | Optional — omit to run the pipeline on the built-in mock |
+| `WHATSAPP_PROVIDER` / `WOOCOMMERCE_PROVIDER` | Leave as `mock` for local dev; the simulator and mock adapter need no external accounts |
 
-Everything else has sane local defaults — see `backend/.env.example` for the full annotated list (Redis, MailHog, WooCommerce, WhatsApp Cloud API).
+**The app runs fully without any AI key.** A stage-aware mock responds instead, so a fresh clone works end to end — that is also how CI runs the E2E suite, deterministically and at no cost.
+
+Everything else has sane local defaults — see `backend/.env.example` for the full annotated list (Redis, MailHog, WooCommerce, WhatsApp Cloud API, and every feature flag).
+
+Behaviour is controlled by flags so anything can be reverted without a deploy:
+
+| Flag | Default | Effect |
+|---|---|---|
+| `VARIANT_STOCK_ENABLED` | `false` | Read stock per size/colour rather than the product total. **Run `npm run backfill:variants` before enabling** |
+| `QUERY_NORMALIZATION_ENABLED` | `true` | Translate Sinhala/Tamil messages before retrieval |
+| `SOFT_ALTERNATIVES_ENABLED` | `true` | Offer close in-stock alternatives instead of a dead end |
+| `DUPLICATE_DETECTION_ENABLED` | `true` | Flag likely repeat orders for review |
+| `HANDOFF_ENABLED` | `true` | Escalate to a human after repeated failed clarifications |
+| `EMBEDDING_PROVIDER` | `none` | `jina` for semantic search, `none` for text matching |
 
 ### 3. Start infrastructure
 
@@ -262,6 +316,8 @@ All endpoints are versioned under `/api/v1`, documented interactively via Swagge
 | **WhatsApp** | `GET|POST /whatsapp/webhook` · `POST /whatsapp/simulator/send` · `GET /whatsapp/simulator/messages` |
 | **Orders** | `GET /orders` · `GET /orders/stats` · `GET /orders/analytics` · `GET /orders/recent-activity` · `GET /orders/events` (SSE) · `GET /orders/drafts` · `GET /orders/drafts/:id` · `PATCH /orders/drafts/:id/approve` · `PATCH /orders/drafts/:id/reject` · `PATCH /orders/drafts/:id/correct` |
 | **Products** | `GET|POST /products` · `GET|PATCH|DELETE /products/:id` |
+| **Variants** | `GET|POST /products/:productId/variants` · `PATCH|DELETE /products/:productId/variants/:variantId` |
+| **AI Engine** | `GET /ai-engine/metrics` · `GET /ai-engine/unfulfilled-demand` |
 | **Customers** | `GET /customers` · `GET /customers/:id` · `GET /customers/:id/orders` · `GET /customers/:id/messages` |
 | **Integrations** | `POST /integrations/woocommerce/sync` |
 | **Notifications** | `GET /notifications` · `PATCH /notifications/:id/read` |
@@ -269,8 +325,13 @@ All endpoints are versioned under `/api/v1`, documented interactively via Swagge
 | **Users** | `GET|POST /users` · `GET|PATCH|DELETE /users/:id` |
 | **Audit Logs** | `GET /audit-logs` · `GET /audit-logs/:entityType/:entityId` |
 | **Admin** (`SUPER_ADMIN` only) | `GET /admin/tenants` · `GET /admin/stats` · `PATCH /admin/tenants/:id/status` |
+| **Health** | `GET /health` (liveness) · `GET /health/ready` (readiness — checks the database) |
 
 Authentication is a `Bearer <JWT>` header only — no query-string tokens are accepted anywhere, including the SSE order-events stream.
+
+Resource ids are validated as UUIDs at the route boundary, so a malformed id returns `400` rather than reaching the ORM.
+
+Swagger is **disabled in production** — `/api/docs` returns `404` outside development.
 
 ## Testing
 
@@ -285,13 +346,37 @@ cd frontend && npm run test:e2e
 
 The Playwright suite (`frontend/e2e/`) is hermetic — each spec registers its own throwaway tenant against the live API and runs against the mock WhatsApp/AI/WooCommerce providers, so it needs no external accounts and leaves no shared state:
 
-- `auth.spec.ts` — register → dashboard → logout → login, invalid-credentials path
-- `order-flow.spec.ts` — the core success path: simulator message → AI draft → owner correction → approval → synced order
-- `regression.spec.ts` — pins down previously-fixed defects so they can't silently reappear
+| Spec | Covers |
+|---|---|
+| `auth.spec.ts` | register → dashboard → logout → login; invalid credentials |
+| `order-flow.spec.ts` | the core path: simulator message → AI draft → owner correction → approval → synced order |
+| `human-handoff.spec.ts` | escalation after repeated failures, notify-once, and no false escalation |
+| `ai-performance.spec.ts` | assistant page states and endpoint authorisation |
+| `regression.spec.ts` | previously-fixed defects, pinned so they cannot silently reappear |
+| `responsive-audit.spec.ts` | no horizontal overflow at 360/375/768px, 44px tap targets, panel positioning |
+| `throttle-exemptions.spec.ts` | health and webhook survive bursts; ordinary routes stay rate limited |
+
+**Current state:** 376 backend unit tests across 36 suites, 22 end-to-end tests, zero TypeScript or ESLint errors in either app.
+
+Overall backend statement coverage is 52.93%, concentrated where the risk is — `integrations/services` 96.77%, `ai-engine/adapters` 80.86%, `products` 77.48%. `common/interceptors` and `common/observability` remain at 0% and are tracked as gaps.
+
+CI runs the E2E suite **without an AI key**, so it stays deterministic, costs no API quota, and fails if the canned mock breaks. Deploys are gated on it.
+
+Extraction quality is measured separately:
+
+```bash
+cd backend && npm run eval
+```
+
+This scores extraction against a labelled dataset. The current figure is **45.8% on 24 invented messages** — a real measurement, but not a measurement of real traffic. That needs 50+ actual customer messages in `backend/eval/dataset.csv`.
 
 ## Security
 
-Security is treated as a first-class architectural concern, not an afterthought (see [`SECURITY.md.pdf`](Documents/SECURITY.md.pdf) for the full constitution). Highlights:
+Security is treated as a first-class architectural concern, not an afterthought (see [`SECURITY.md.pdf`](Documents/SECURITY.md.pdf) for the full constitution).
+
+Tenant isolation is **verified adversarially**, not assumed: two tenants were registered and one attempted to read, write, delete and list the other's data. All four were blocked with `404` — the attacker is not told the resource exists — and a variant listing returned zero rows. Full results in [`Documents/QA_REPORT.md`](Documents/QA_REPORT.md).
+
+Highlights:
 
 - **JWT auth** with short-lived access tokens and secure refresh tokens; RBAC enforced server-side on every endpoint — the frontend never gets to decide authorization.
 - **Strict tenant isolation** — every repository query is scoped by `tenant_id`; cross-tenant access is treated as a critical bug, not an edge case.
@@ -299,7 +384,9 @@ Security is treated as a first-class architectural concern, not an afterthought 
 - **Input validation everywhere** via `class-validator` DTOs; Prisma-only data access (no raw SQL, no injection surface).
 - **Rate limiting** (`@nestjs/throttler`) on public and auth-sensitive endpoints.
 - **Webhook signature verification** for Meta WhatsApp payloads.
-- **Sanitized error responses** — stack traces, DB errors, and internals are never exposed to clients.
+- **Sanitized error responses** — unexpected errors return a generic message while the real error and stack are logged server-side. Deliberate messages ("Insufficient stock for Blue Shirt") pass through, because those are written for the caller. Covered by tests asserting no stack trace, file path or ORM detail can reach a response.
+- **UUID validation at the route boundary** — malformed ids are rejected as `400` before reaching the ORM.
+- **Rate-limit exemptions are explicit and tested** — health probes and the WhatsApp webhook must never be throttled (a throttled webhook drops real customer messages), and four E2E tests burst each route to prove the exemption holds.
 - **Prompt-injection awareness** — customer messages are treated as untrusted input; the AI is instructed to ignore attempts to reveal or override its system instructions, and only ever receives the minimum data needed (message + relevant catalogue slice), never secrets or credentials.
 
 ## Business Rules & AI Governance
@@ -336,34 +423,75 @@ stateDiagram-v2
 
 ## Project Status
 
-Currently at **Phase 8 — Frontend Completion & E2E** of a phase-based delivery model (full history in [`CHANGELOG.md`](CHANGELOG.md)):
+**Deployed and functionally complete. Not yet commercially live.**
 
-- Backend: full test suite green, clean `tsc --noEmit` and `nest build`.
-- Frontend: clean `tsc --noEmit` and production `next build` across all routes.
-- Full page audit performed against the live backend (Dashboard, Orders, Products, Customers, Simulator, Notifications, Analytics, Settings, Auth) with zero console errors and zero failed network requests.
-- The full success-criterion flow — **WhatsApp message → AI draft → owner correction → approval → real WooCommerce order → customer confirmation** — has been verified end-to-end against a live WooCommerce store, not just mocks.
+| Area | State |
+|---|---|
+| Backend | 376 tests, 36 suites, clean `tsc --noEmit` and `nest build` |
+| Frontend | 22 E2E tests, clean `tsc --noEmit` and production `next build` |
+| Database | 7 migrations applying to an empty database; 17 tables, 67 indexes |
+| Tenant isolation | Verified adversarially — 5 of 5 attack attempts blocked |
+| Deployment | Live on Render · Vercel · Neon, readiness probe reporting `database: up` |
+| Performance | p95 under 10 ms per endpoint; 4,008 req/s at 200 concurrent, zero failures |
+| Resilience | Verified by stopping Postgres and Redis mid-flight — liveness holds, readiness reports 503, recovery is unaided |
 
-**Known, tracked gaps** (see `CHANGELOG.md` for details, not undiscovered bugs):
-- Self-service registration password policy is not yet aligned with the ≥12-character/complexity policy enforced elsewhere (`SECURITY.md` §14).
-- Real Gemini AI extraction requires a billing-enabled Google AI Studio key; without one, the system correctly and intentionally falls back to a lower-quality mock extractor rather than failing.
+The full success path — **WhatsApp message → AI draft → owner correction → approval → real WooCommerce order → customer confirmation** — has been verified end to end against a live WooCommerce store, not only mocks.
+
+### What is not ready
+
+These are tracked and understood, not undiscovered:
+
+| Gap | Detail |
+|---|---|
+| 🔴 **AI capacity** | The free tier allows ~3,250 tokens per message against 100,000/day shared across all tenants — roughly **30 messages a day for the whole platform**. One shop exceeds that before lunch. The fix is engineering, not billing: send the top 3 retrieved products instead of the full catalogue context, and fold intent detection into the extraction call. |
+| 🔴 **No billing** | `TenantPlan` (`STARTER`/`BUSINESS`/`ENTERPRISE`) is modelled but never enforced anywhere in the code. Architecturally multi-tenant SaaS; commercially not yet. |
+| 🟡 **Email notifications fail** | No mail provider configured in production. WhatsApp notifications work. |
+| 🟡 **Semantic search inactive** | The embedding key has no balance, so product search uses text matching. Correct degradation, not a fault. |
+| 🟡 **Voice notes dropped** | Non-`TEXT` messages are skipped. Whisper is available on the current key but unimplemented. |
+| 🟡 **WooCommerce pagination** | `getProducts()` fetches page 1 only. Latent — every tenant is on `MOCK`. |
+| 🟢 **Sinhala extraction accuracy** | Retrieval is solved; extraction still mislabels colours and drops Singlish quantities. The 0.95 auto-approve floor is what prevents these reaching a customer. |
+
+Full detail, including performance and resilience results, in [`Documents/QA_REPORT.md`](Documents/QA_REPORT.md).
 
 ## Roadmap
 
-**Phase 2**
-- Shopify integration
-- Facebook Messenger & Instagram DM channels
-- Sinhala language support
-- Voice message processing
+**Next — required before charging anyone**
+- Reduce tokens per message (top-3 catalogue slice, single AI call) — the blocker
+- Plan enforcement and payments (Stripe or a local gateway such as PayHere)
+- Email provider so owner alerts arrive
+- 50+ real WhatsApp messages in the eval dataset, then re-measure accuracy
 
-**Phase 3**
-- Inventory prediction & AI sales forecasting
-- Marketing automation
-- Courier/logistics integration
-- Plugin marketplace
+**Then — before a real shop goes live**
+- Complete the variant rollout (PR4 contract) once `VARIANT_STOCK_ENABLED` has run in production
+- WooCommerce pagination and variation sync (`variation_id` on line items)
+- Voice notes via Whisper — the model is already available on the current key
 
-## Internal Documentation
+**Later**
+- Image understanding for forwarded product screenshots
+- Shopify adapter, Instagram and Messenger channels
+- Inventory prediction and sales forecasting
+- Courier and logistics integration
 
-The `Documents/` folder holds the source-of-truth specification the codebase is built against — read these before making architectural changes:
+## Documentation
+
+Two documents live at the repository root and describe the system **as it is
+today**:
+
+| Document | Covers |
+|---|---|
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Request lifecycle, the six-stage AI pipeline, provider abstraction, multi-tenancy, the expand/contract variant rollout, verified failure behaviour |
+| [`TECHNOLOGY.md`](TECHNOLOGY.md) | Every dependency, why it was chosen over the alternative, and the version-specific traps found along the way |
+
+Generated and measured artefacts:
+
+| Document | Covers |
+|---|---|
+| [`Documents/QA_REPORT.md`](Documents/QA_REPORT.md) | Full QA results — tests, security, performance, resilience, and the defects found |
+| [`Documents/SCHEMA.md`](Documents/SCHEMA.md) | ER diagram, rendered inline by GitHub |
+| [`Documents/schema.dbml`](Documents/schema.dbml) | Paste into dbdiagram.io for an interactive diagram |
+| [`Documents/IMPLEMENTATION_PLAN.md`](Documents/IMPLEMENTATION_PLAN.md) | Phase-by-phase delivery plan and current position |
+
+The `Documents/` folder also holds the source-of-truth specification the codebase was built against — read these before making architectural changes:
 
 | Document | Covers |
 |---|---|
@@ -385,6 +513,6 @@ This project is currently **proprietary / unlicensed for public use** (see `pack
 
 <div align="center">
 
-Built as a production-grade AI commerce automation platform — not a demo.
+376 unit tests · 22 end-to-end tests · deployed on Render, Vercel and Neon
 
 </div>
