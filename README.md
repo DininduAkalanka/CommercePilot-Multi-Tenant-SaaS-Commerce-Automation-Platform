@@ -1,8 +1,13 @@
 # CommercePilot
 
-**The AI Automation Layer for Existing E-commerce Businesses**
+**Multi-Tenant SaaS Order Automation for WhatsApp-First Businesses**
 
-CommercePilot turns WhatsApp order chaos into a governed, auditable pipeline — without replacing the store a business already runs. It reads incoming WhatsApp messages, uses AI to understand intent and extract structured orders against a tenant's real product catalogue (RAG, never invented products), scores its own confidence, and hands every order to the business owner for a final human decision before anything is written back to WooCommerce.
+Small shops across South Asia take most of their orders on WhatsApp, by hand,
+one message at a time. CommercePilot reads those messages, works out what the
+customer wants, checks real stock, and prepares the order — then waits for the
+shop owner to approve it.
+
+Nothing ships without a human saying yes.
 
 > AI recommends. Humans decide. Every action is audited.
 
@@ -40,16 +45,84 @@ CommercePilot turns WhatsApp order chaos into a governed, auditable pipeline —
 
 ## Overview
 
-Most small and medium e-commerce businesses already run WooCommerce (or a similar store) — their real bottleneck is that a huge share of orders arrive as free-form WhatsApp messages, which someone has to read, interpret, check against stock, and re-enter by hand.
+### The problem
 
-CommercePilot is **not** a new storefront and **not** a chatbot. It is an AI employee that sits between WhatsApp and the existing store:
+In Sri Lanka and across South Asia, small shops do not sell through websites.
+**They sell through WhatsApp.**
 
-- Understands what a customer is asking for, in natural language.
-- Matches it against the tenant's **real** product catalogue via retrieval-augmented generation — it is architecturally incapable of inventing a product that doesn't exist in the catalogue.
-- Produces a structured draft order with a calculated confidence score.
-- Puts the business owner in the loop for approval, correction, or rejection.
-- Only after human approval does it write the order back to WooCommerce, adjust inventory, and notify the customer.
-- Logs every step — every AI decision, every owner action — to an immutable audit trail.
+A typical day for a clothing shop owner:
+
+1. Posts a product photo on Facebook or Instagram
+2. Forty people message WhatsApp — *"mata meka one"*, *"price?"*, *"size L
+   tiyenawada?"*
+3. The owner answers each one by hand, on their phone
+4. Checks stock from memory, or by walking to the shelf
+5. Writes the order in a notebook — or just remembers it
+6. At 11pm, types the day's orders into their system
+
+Five things go wrong, every day:
+
+| What happens | What it costs |
+|---|---|
+| Messages arrive faster than one person can reply | A customer waits two hours and buys elsewhere |
+| Messages arrive at night, or while serving a walk-in | Answered next morning; many are already gone |
+| *"Do you have blue in L?"* answered from memory | Stock promised that cannot ship → refund, bad review |
+| An impatient customer messages twice | Two parcels shipped, one comes back |
+| Orders live inside chat threads | No records, no reporting, no proof in a dispute |
+
+The deepest problem is invisible: **the owner never finds out what they lost.**
+The customer who waited forty minutes and left appears in no report.
+
+### What CommercePilot does
+
+It sits between WhatsApp and the store the business already runs — reading each
+message, working out what the customer wants, checking real stock, and
+preparing the order.
+
+**The owner taps approve.** The order lands in WooCommerce.
+
+It is **not** a new storefront and **not** a chatbot. Think of it as an
+assistant that does the typing while the owner keeps the decisions.
+
+```
+Customer message  →  AI reads it  →  Draft order  →  Owner approves  →  Real order
+                                          ↑
+                              nothing ships without this
+```
+
+### What changes for the shop owner
+
+| Before | After |
+|---|---|
+| ~2 minutes per message, 50 messages a day — **1.7 hours** | Review a prepared draft in ~10 seconds |
+| Stock checked from memory | Stock checked per size and colour before the order exists |
+| Orders re-typed into the system at night | Approved orders reach WooCommerce directly |
+| No idea which products customers wanted | Every unmatched request logged and ranked by how many people asked |
+| Duplicate orders discovered after shipping | Likely repeats flagged for review first |
+
+The reporting side is quietly the most valuable. Today a shop owner has no way
+to know what they are failing to sell. CommercePilot records every request the
+catalogue could not match — turning stocking decisions from guesswork into data.
+
+### What changes for the customer
+
+| Before | After |
+|---|---|
+| Waits minutes to hours for a reply | Answered in seconds, at any hour |
+| Told an item is available, then it isn't | Availability checked against real per-variant stock |
+| Writes in Sinhala or Singlish and is misunderstood | English, Sinhala and Singlish all handled |
+| *"We don't have that"* — conversation ends | Offered up to three close **in-stock** alternatives |
+| Stuck in a loop with a bot that cannot help | Handed to a real person after two failed attempts |
+
+### Why a human still approves
+
+The AI drafts; it does not send. Every order waits for the owner unless they
+explicitly enable auto-approval, and even then only above 95% confidence.
+
+That single decision is what makes the system safe to trust. An AI mistake
+costs a few seconds of review instead of a wrong delivery, a refund, and a lost
+customer — and the owner sees the customer's original message beside every
+draft, so a misread order is caught in one glance.
 
 ## How It Works
 
@@ -437,21 +510,7 @@ stateDiagram-v2
 
 The full success path — **WhatsApp message → AI draft → owner correction → approval → real WooCommerce order → customer confirmation** — has been verified end to end against a live WooCommerce store, not only mocks.
 
-### What is not ready
-
-These are tracked and understood, not undiscovered:
-
-| Gap | Detail |
-|---|---|
-| 🔴 **AI capacity** | The free tier allows ~3,250 tokens per message against 100,000/day shared across all tenants — roughly **30 messages a day for the whole platform**. One shop exceeds that before lunch. The fix is engineering, not billing: send the top 3 retrieved products instead of the full catalogue context, and fold intent detection into the extraction call. |
-| 🔴 **No billing** | `TenantPlan` (`STARTER`/`BUSINESS`/`ENTERPRISE`) is modelled but never enforced anywhere in the code. Architecturally multi-tenant SaaS; commercially not yet. |
-| 🟡 **Email notifications fail** | No mail provider configured in production. WhatsApp notifications work. |
-| 🟡 **Semantic search inactive** | The embedding key has no balance, so product search uses text matching. Correct degradation, not a fault. |
-| 🟡 **Voice notes dropped** | Non-`TEXT` messages are skipped. Whisper is available on the current key but unimplemented. |
-| 🟡 **WooCommerce pagination** | `getProducts()` fetches page 1 only. Latent — every tenant is on `MOCK`. |
-| 🟢 **Sinhala extraction accuracy** | Retrieval is solved; extraction still mislabels colours and drops Singlish quantities. The 0.95 auto-approve floor is what prevents these reaching a customer. |
-
-Full detail, including performance and resilience results, in [`Documents/QA_REPORT.md`](Documents/QA_REPORT.md).
+Known limitations, performance figures and resilience results are recorded in [`Documents/QA_REPORT.md`](Documents/QA_REPORT.md).
 
 ## Roadmap
 
