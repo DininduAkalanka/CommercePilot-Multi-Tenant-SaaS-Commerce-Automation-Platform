@@ -53,8 +53,8 @@ In Sri Lanka and across South Asia, small shops do not sell through websites.
 A typical day for a clothing shop owner:
 
 1. Posts a product photo on Facebook or Instagram
-2. Forty people message WhatsApp — *"mata meka one"*, *"price?"*, *"size L
-   tiyenawada?"*
+2. Forty people message WhatsApp — *"Do you have this?"*, *"What's the
+   price?"*, *"Is size L available?"*
 3. The owner answers each one by hand, on their phone
 4. Checks stock from memory, or by walking to the shelf
 5. Writes the order in a notebook — or just remembers it
