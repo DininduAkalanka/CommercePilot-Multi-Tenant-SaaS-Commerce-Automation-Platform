@@ -11,6 +11,20 @@ Nothing ships without a human saying yes.
 
 > AI recommends. Humans decide. Every action is audited.
 
+<p align="center">
+  <img src="assets/hero.png" alt="CommercePilot — the operations dashboard on desktop and the sign-in screen on mobile" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://commerce-pilot-multi-tenant-saa-s-c.vercel.app"><strong>Live dashboard</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://commercepilot-multi-tenant-saas-commerce.onrender.com/api/v1/health">API health</a>
+  &nbsp;·&nbsp;
+  <a href="ARCHITECTURE.md">Architecture</a>
+  &nbsp;·&nbsp;
+  <a href="TECHNOLOGY.md">Technology</a>
+</p>
+
 [![NestJS](https://img.shields.io/badge/Backend-NestJS%2011-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -25,6 +39,7 @@ Nothing ships without a human saying yes.
 ## Table of Contents
 
 - [Overview](#overview)
+- [Try It](#try-it)
 - [How It Works](#how-it-works)
 - [Core Modules](#core-modules)
 - [Tech Stack](#tech-stack)
@@ -123,6 +138,24 @@ That single decision is what makes the system safe to trust. An AI mistake
 costs a few seconds of review instead of a wrong delivery, a refund, and a lost
 customer — and the owner sees the customer's original message beside every
 draft, so a misread order is caught in one glance.
+
+## Try It
+
+| | |
+|---|---|
+| **Dashboard** | <https://commerce-pilot-multi-tenant-saa-s-c.vercel.app> |
+| **API health** | <https://commercepilot-multi-tenant-saas-commerce.onrender.com/api/v1/health> |
+
+Register a business, then open **WhatsApp** in the sidebar — the built-in
+simulator posts messages into the same pipeline a real Meta webhook triggers,
+so the full flow can be exercised without a WhatsApp Business account.
+
+Two things to expect on the hosted demo:
+
+- The API runs on a free tier that sleeps when idle, so the first request after
+  a quiet period takes around 50 seconds. Subsequent requests are immediate.
+- AI replies come from the built-in mock unless a provider key is configured.
+  The pipeline, approval flow and stock checks are all real either way.
 
 ## How It Works
 
