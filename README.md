@@ -9,7 +9,6 @@ shop owner to approve it.
 
 Nothing ships without a human saying yes.
 
-> AI recommends. Humans decide. Every action is audited.
 
 <p align="center">
   <img src="assets/hero.png" alt="CommercePilot — the operations dashboard on desktop and the sign-in screen on mobile" width="100%">
