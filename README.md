@@ -2,13 +2,10 @@
 
 **Multi-Tenant SaaS Order Automation for WhatsApp-First Businesses**
 
-Small shops across South Asia take most of their orders on WhatsApp, by hand,
+Small shops across South Asia and Sri Lanka take most of their orders on WhatsApp, by hand,
 one message at a time. CommercePilot reads those messages, works out what the
 customer wants, checks real stock, and prepares the order — then waits for the
 shop owner to approve it.
-
-Nothing ships without a human saying yes.
-
 
 <p align="center">
   <img src="assets/hero.png" alt="CommercePilot — the operations dashboard on desktop and the sign-in screen on mobile" width="100%">
